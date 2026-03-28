@@ -1,9 +1,9 @@
 import { defaultKeymap, deleteCharBackwardStrict, history, historyKeymap, indentSelection, isolateHistory, redo, undo } from "@codemirror/commands";
 import { cpp } from "@codemirror/lang-cpp";
 import { markdown } from "@codemirror/lang-markdown";
-import { bracketMatching, foldGutter, indentOnInput, indentService, indentUnit } from "@codemirror/language";
+import { bracketMatching, foldGutter, indentOnInput } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
-import { EditorState, Extension } from "@codemirror/state";
+import { EditorSelection, EditorState, Extension } from "@codemirror/state";
 import { crosshairCursor, drawSelection, dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, rectangularSelection, ViewUpdate } from "@codemirror/view";
 import { CodeAnalyzer } from "../../common/analysis";
 import { hex, rpad } from "../../common/util";
@@ -144,19 +144,23 @@ export class SourceEditor implements ProjectView {
       doc: text,
       extensions: [
 
-        // Non-asm: 2-space indent (placed before settings so it takes precedence over tabSize-based indentUnit)
-        isAsm ? [] : indentUnit.of("  "),
-        // Asm: copy previous line's indentation since asm parsers lack proper indent rules
-        isAsm ? indentService.of((context, pos) => {
-          let lineNum = context.state.doc.lineAt(pos).number;
-          if (lineNum >= 0) {
-            let prevLine = context.state.doc.line(lineNum);
-            if (prevLine.text.trim()) {
-              return context.lineIndent(prevLine.from);
-            }
+        isAsm ? keymap.of([{
+          key: "Enter",
+          run: (view) => {
+            // Copy leading whitespace up to cursor pos for each cursor.
+            const changes = view.state.changeByRange(range => {
+              const line = view.state.doc.lineAt(range.head);
+              const indent = line.text.match(/^[ \t]*/)[0].slice(0, range.head - line.from);
+              const insert = "\n" + indent;
+              return {
+                changes: { from: range.from, to: range.to, insert },
+                range: EditorSelection.cursor(range.from + insert.length),
+              };
+            });
+            view.dispatch(changes, { scrollIntoView: true, userEvent: "input" });
+            return true;
           }
-          return 0;
-        }) : [],
+        }]) : [],
 
         // Keybindings from settings must appear before default keymap.
         ...settingsExtensions(loadSettings()),
