@@ -21,11 +21,11 @@ import { disassemblyTheme } from "../../themes/disassemblyTheme";
 import { editorTheme } from "../../themes/editorTheme";
 import { mbo } from "../../themes/mbo";
 import { loadSettings, registerEditor, settingsExtensions } from "../settings";
-import { clearBreakpoint, current_project, lastDebugState, platform, qs, runToPC } from "../ui";
+import { clearBreakpoint, current_project, lastDebugState, platform, runToPC } from "../ui";
 import { createAssetHeaderPlugin } from "./assetdecorations";
 import { isMobileDevice, ProjectView } from "./baseviews";
 import { createTextTransformFilterEffect, textTransformFilterCompartment } from "./filters";
-import { breakpointMarkers, bytes, clock, currentPcMarker, errorMarkers, offset, statusMarkers } from "./gutter";
+import { breakpointMarkers, bytes, clock, currentPcMarker, errorMarkers, gutterLineInfo, offset, statusMarkers } from "./gutter";
 import { currentPc, errorMessages, errorSpans, highlightLines, showValue } from "./visuals";
 
 // look ahead this many bytes when finding source lines for a PC
@@ -42,8 +42,8 @@ const MODEDEFS = {
   vasm: { isAsm: true },
   inform6: { theme: cobalt },
   markdown: { lineWrap: true },
-  fastbasic: { noGutters: true },
-  basic: { noLineNumbers: true, noGutters: true },
+  fastbasic: { noGutterLineInfo: true },
+  basic: { noGutterLineInfo: true },
   ecs: { theme: mbo }, // TODO: is actually mixed-mode, as is verilog
 }
 
@@ -62,8 +62,8 @@ export class SourceEditor implements ProjectView {
   }
   path: string;
   mode: string;
-  editor;
-  updateTimer = null;
+  editor: EditorView;
+  updateTimer: ReturnType<typeof setTimeout> | null = null;
   dirtylisting = true;
   sourcefile: SourceFile;
   currentDebugLine: SourceLocation;
@@ -97,11 +97,6 @@ export class SourceEditor implements ProjectView {
     var lineWrap = !!modedef.lineWrap;
     var theme = modedef.theme || MODEDEFS.default.theme;
     var lineNums = !isAsm && !modedef.noLineNumbers && !isMobileDevice;
-    if (qs['embed']) {
-      lineNums = false; // no line numbers while embedded
-      isAsm = false; // no opcode bytes either
-    }
-    const minimalGutters = modedef.noGutters || isMobileDevice;
 
     var parser: Extension;
     switch (this.mode) {
@@ -209,18 +204,7 @@ export class SourceEditor implements ProjectView {
 
         currentPc.field,
 
-        !minimalGutters ? [
-          offset.field,
-          offset.gutter,
-        ] : [],
-
-        isAsm && !minimalGutters ? [
-          bytes.field,
-          bytes.gutter,
-
-          clock.field,
-          clock.gutter,
-        ] : [],
+        gutterLineInfo(isAsm, !!modedef.noGutterLineInfo),
 
         breakpointMarkers.field,
         statusMarkers.gutter,

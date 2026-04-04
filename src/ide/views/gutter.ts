@@ -1,6 +1,7 @@
-import { RangeSet, StateEffect, StateField } from "@codemirror/state";
-import { gutter, GutterMarker } from "@codemirror/view";
+import { Compartment, Extension, RangeSet, StateEffect, StateField } from "@codemirror/state";
+import { gutter, GutterMarker, ViewPlugin } from "@codemirror/view";
 import { hex } from "../../common/util";
+import { isMobileDevice } from "./baseviews";
 
 const setOffset = StateEffect.define<Map<number, number>>();
 const setBytes = StateEffect.define<Map<number, string>>();
@@ -347,3 +348,24 @@ export const currentPcMarker = {
     field: currentPcField,
     gutter: currentPcGutter,
 };
+
+export function gutterLineInfo(isAsm: boolean, alwaysHide: boolean): Extension {
+    const compartment = new Compartment();
+
+    const gutters = (): Extension => {
+        const hide = alwaysHide || isMobileDevice;
+        return [
+            !hide ? [offsetField, offsetGutter] : [],
+            isAsm && !hide ? [bytesField, bytesGutter, clockField, clockGutter] : [],
+        ];
+    };
+
+    return [
+        compartment.of(gutters()),
+        ViewPlugin.define(view => {
+            const onResize = () => view.dispatch({ effects: compartment.reconfigure(gutters()) });
+            window.addEventListener("resize", onResize);
+            return { destroy() { window.removeEventListener("resize", onResize); } };
+        }),
+    ];
+}
