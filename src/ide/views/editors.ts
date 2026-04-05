@@ -69,8 +69,9 @@ export class SourceEditor implements ProjectView {
     div.setAttribute("class", "editor");
     parent.appendChild(div);
     var text = current_project.getFile(this.path) as string;
-    var asmOverride = text && this.mode == 'verilog' && /__asm\b([\s\S]+?)\b__endasm\b/.test(text);
-    this.newEditor(div, text, asmOverride);
+    // TODO support mixed language parsing: https://codemirror.net/examples/mixed-language/
+    var includesAsm = text && this.mode == 'verilog' && /__asm\b([\s\S]+?)\b__endasm\b/.test(text);
+    this.newEditor(div, text, includesAsm);
     this.editor.dispatch({
       effects: createTextTransformFilterEffect(textMapFunctions),
     });
@@ -86,9 +87,9 @@ export class SourceEditor implements ProjectView {
     }
   }
 
-  newEditor(parent: HTMLElement, text: string, isAsmOverride?: boolean) {
+  newEditor(parent: HTMLElement, text: string, includesAsm?: boolean) {
     var modedef = MODEDEFS[this.mode] || MODEDEFS.default;
-    var isAsm = isAsmOverride || isAsmMode(this.mode);
+    var isAsm = isAsmMode(this.mode);
     var lineWrap = !!modedef.lineWrap;
     var theme = modedef.theme || MODEDEFS.default.theme;
     var lineNums = !isAsm && !modedef.noLineNumbers && !isMobileDevice;
@@ -199,7 +200,7 @@ export class SourceEditor implements ProjectView {
 
         currentPc.field,
 
-        gutterLineInfo(isAsm, !!modedef.noGutterLineInfo),
+        gutterLineInfo(isAsm || includesAsm, !!modedef.noGutterLineInfo),
 
         breakpointMarkers.field,
         statusMarkers.gutter,

@@ -349,14 +349,14 @@ export const currentPcMarker = {
     gutter: currentPcGutter,
 };
 
-export function gutterLineInfo(isAsm: boolean, alwaysHide: boolean): Extension {
+export function gutterLineInfo(isOrIncludesAsm: boolean, alwaysHide: boolean): Extension {
     const compartment = new Compartment();
 
     const gutters = (): Extension => {
         const hide = alwaysHide || isMobileDevice;
         return [
             !hide ? [offsetField, offsetGutter] : [],
-            isAsm && !hide ? [bytesField, bytesGutter, clockField, clockGutter] : [],
+            isOrIncludesAsm && !hide ? [bytesField, bytesGutter, clockField, clockGutter] : [],
         ];
     };
 
