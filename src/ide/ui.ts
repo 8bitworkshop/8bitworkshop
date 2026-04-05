@@ -145,6 +145,12 @@ const TOOL_TO_SOURCE_STYLE = {
   'oscar64': 'text/x-csrc',
 }
 
+const ASM_MODES = new Set(['6502', 'z80', '6809', 'gas', 'vasm', 'jsasm']);
+
+export function isAsmMode(mode: string): boolean {
+  return ASM_MODES.has(mode);
+}
+
 // TODO: move into tool class
 const TOOL_TO_HELPURL = {
   'dasm': 'https://raw.githubusercontent.com/sehugg/dasm/master/doc/dasm.txt',

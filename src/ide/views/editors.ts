@@ -21,7 +21,7 @@ import { disassemblyTheme } from "../../themes/disassemblyTheme";
 import { editorTheme } from "../../themes/editorTheme";
 import { mbo } from "../../themes/mbo";
 import { loadSettings, registerEditor, settingsExtensions } from "../settings";
-import { clearBreakpoint, current_project, lastDebugState, platform, runToPC } from "../ui";
+import { clearBreakpoint, current_project, isAsmMode, lastDebugState, platform, runToPC } from "../ui";
 import { createAssetHeaderPlugin } from "./assetdecorations";
 import { isMobileDevice, ProjectView } from "./baseviews";
 import { createTextTransformFilterEffect, textTransformFilterCompartment } from "./filters";
@@ -35,11 +35,6 @@ const MAX_ERRORS = 200;
 
 const MODEDEFS = {
   default: { theme: mbo }, // NOTE: Not merged w/ other modes
-  '6502': { isAsm: true },
-  z80: { isAsm: true },
-  jsasm: { isAsm: true },
-  gas: { isAsm: true },
-  vasm: { isAsm: true },
   inform6: { theme: cobalt },
   markdown: { lineWrap: true },
   fastbasic: { noGutterLineInfo: true },
@@ -93,7 +88,7 @@ export class SourceEditor implements ProjectView {
 
   newEditor(parent: HTMLElement, text: string, isAsmOverride?: boolean) {
     var modedef = MODEDEFS[this.mode] || MODEDEFS.default;
-    var isAsm = isAsmOverride || modedef.isAsm;
+    var isAsm = isAsmOverride || isAsmMode(this.mode);
     var lineWrap = !!modedef.lineWrap;
     var theme = modedef.theme || MODEDEFS.default.theme;
     var lineNums = !isAsm && !modedef.noLineNumbers && !isMobileDevice;
