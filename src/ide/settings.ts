@@ -16,6 +16,16 @@ export const closeBracketsCompartment = new Compartment();
 export const tabsToSpacesCompartment = new Compartment();
 export const debugHighlightTagsCompartment = new Compartment();
 
+const editors: Set<EditorView> = new Set();
+
+export function registerEditor(editor: EditorView) {
+  editors.add(editor);
+}
+
+export function unregisterEditor(editor: EditorView) {
+  editors.delete(editor);
+}
+
 export interface EditorSettings {
   tabSize: number;
   tabsToSpaces: boolean;
@@ -40,7 +50,7 @@ const defaultSettings: EditorSettings = {
 
 export function loadSettings(): EditorSettings {
   try {
-    var stored = localStorage.getItem(SETTINGS_KEY);
+    const stored = localStorage.getItem(SETTINGS_KEY);
     if (stored) {
       return { ...defaultSettings, ...JSON.parse(stored) };
     }
@@ -48,8 +58,12 @@ export function loadSettings(): EditorSettings {
   return { ...defaultSettings };
 }
 
-export function saveSettings(settings: EditorSettings) {
+export function saveAndApplySettings(settings: EditorSettings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  const effects = compartmentValues.map(([c, fn]) => c.reconfigure(fn(settings)));
+  for (const editor of editors) {
+    editor.dispatch({ effects });
+  }
 }
 
 const compartmentValues: [Compartment, (s: EditorSettings) => Extension][] = [
@@ -64,24 +78,6 @@ const compartmentValues: [Compartment, (s: EditorSettings) => Extension][] = [
 
 export function settingsExtensions(settings: EditorSettings): Extension[] {
   return compartmentValues.map(([c, fn]) => c.of(fn(settings)));
-}
-
-// Track all active editor views so we can reconfigure them
-const activeEditors: Set<EditorView> = new Set();
-
-export function registerEditor(editor: EditorView) {
-  activeEditors.add(editor);
-}
-
-export function unregisterEditor(editor: EditorView) {
-  activeEditors.delete(editor);
-}
-
-export function applySettingsToAll(settings: EditorSettings) {
-  var effects = compartmentValues.map(([c, fn]) => c.reconfigure(fn(settings)));
-  for (var editor of activeEditors) {
-    editor.dispatch({ effects });
-  }
 }
 
 export function openSettings() {
@@ -117,8 +113,7 @@ export function openSettings() {
           settings.highlightTrailingWhitespace = $('#setting_highlightTrailingWhitespace').is(':checked');
           settings.closeBrackets = $('#setting_closeBrackets').is(':checked');
           settings.debugHighlightTags = $('#setting_debugHighlightTags').is(':checked');
-          saveSettings(settings);
-          applySettingsToAll(settings);
+          saveAndApplySettings(settings);
         }
       }
     }
