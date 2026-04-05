@@ -880,6 +880,9 @@ div.scripting-cell button:hover {
 div.scripting-cell button.scripting-enabled {
   background-color: #339999;
 }
+#settingsForm h5:not(:first-child) {
+  margin-top: 24px;
+}
 .dialog-help {
   color: #6666ff;
 }
