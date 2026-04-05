@@ -162,6 +162,16 @@ const TOOL_TO_HELPURL = {
   'acme': 'https://raw.githubusercontent.com/sehugg/acme/main/docs/QuickRef.txt',
 }
 
+export function getModeForPath(path: string) {
+  var tool = platform.getToolForFilename(path);
+  // hack because .h files can be DASM or CC65
+  if (tool == 'dasm' && path.endsWith(".h") && getCurrentMainFilename().endsWith(".c")) {
+    tool = 'cc65';
+  }
+  var mode = tool && TOOL_TO_SOURCE_STYLE[tool];
+  return mode;
+}
+
 function newWorker(): Worker {
   // TODO: return new Worker("https://8bitworkshop.com.s3-website-us-east-1.amazonaws.com/dev/gen/worker/bundle.js");
   return new Worker("./gen/worker/bundle.js");
@@ -310,21 +320,11 @@ function refreshWindowList() {
     }
   }
 
-  function loadEditor(path: string) {
-    var tool = platform.getToolForFilename(path);
-    // hack because .h files can be DASM or CC65
-    if (tool == 'dasm' && path.endsWith(".h") && getCurrentMainFilename().endsWith(".c")) {
-      tool = 'cc65';
-    }
-    var mode = tool && TOOL_TO_SOURCE_STYLE[tool];
-    return new SourceEditor(path, mode);
-  }
-
   function addEditorItem(id: string) {
     addWindowItem(id, getFilenameForPath(id), () => {
       var data = current_project.getFile(id);
       if (typeof data === 'string')
-        return loadEditor(id);
+        return new SourceEditor(id, getModeForPath(id));
       else if (data instanceof Uint8Array)
         return new BinaryFileView(id, data as Uint8Array);
     });
@@ -493,7 +493,7 @@ async function getSkeletonFile(fileid: string): Promise<string> {
   try {
     return await $.get("presets/" + getBasePlatform(platform_id) + "/skeleton." + ext, 'text');
   } catch (e) {
-    console.log(e+"");
+    console.log(e + "");
     return null;
   }
 }
