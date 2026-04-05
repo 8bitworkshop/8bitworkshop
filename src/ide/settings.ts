@@ -87,7 +87,7 @@ export function settingsExtensions(settings: EditorSettings): Extension[] {
 
 export function openSettings() {
   var settings = loadSettings();
-  bootbox.dialog({
+  const dialog = bootbox.dialog({
     onEscape: true,
     // title: "Settings",
     message: `<form id="settingsForm" onsubmit="return false">
@@ -108,7 +108,7 @@ export function openSettings() {
         label: "Cancel",
         className: "btn-default"
       },
-      ok: {
+      save: {
         label: "SAVE",
         className: "btn-primary",
         callback: () => {
@@ -123,6 +123,12 @@ export function openSettings() {
           saveAndApplySettings(settings);
         }
       }
+    }
+  });
+  dialog.on('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      dialog.find('.modal-footer .btn-primary').trigger('click');
     }
   });
 }
