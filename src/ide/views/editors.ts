@@ -1,4 +1,4 @@
-import { defaultKeymap, history, historyKeymap, indentSelection, isolateHistory, redo, undo } from "@codemirror/commands";
+import { defaultKeymap, deleteCharBackwardStrict, history, historyKeymap, indentSelection, isolateHistory, redo, undo } from "@codemirror/commands";
 import { cpp } from "@codemirror/lang-cpp";
 import { markdown } from "@codemirror/lang-markdown";
 import { bracketMatching, foldGutter, indentOnInput, indentService, indentUnit } from "@codemirror/language";
@@ -163,6 +163,7 @@ export class SourceEditor implements ProjectView {
         keymap.of([
           { key: "Ctrl-Shift-i", run: indentSelection },
           { key: "Cmd-Shift-i", run: indentSelection },
+          { key: "Backspace", run: deleteCharBackwardStrict },
         ]),
         keymap.of(defaultKeymap),
 
