@@ -1508,6 +1508,7 @@ function setupDebugControls() {
   $("#item_addfile_link").click(_addLinkFile);
   $("#item_request_persist").click(() => requestPersistPermission(true, false));
   $("#item_settings").click(openSettings);
+  $("#item_keyboard_shortcuts").click(openKeyboardShortcuts);
   updateDebugWindows();
   // code analyzer?
   if (platform.newCodeAnalyzer) {
@@ -1531,6 +1532,41 @@ function setupDebugControls() {
     $("#help_menu").append(li);
     $(a).click(() => window.open(toolhelpurl, '_8bws_help'));
   }
+}
+
+function openKeyboardShortcuts() {
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const mod = isMac ? '&#8984;' : 'Ctrl';
+  const alt = isMac ? '&#8997;' : 'Alt';
+  const shift = isMac ? '&#8679;' : 'Shift';
+  const shortcut = (keys: string, desc: string) =>
+    `<tr><td><kbd>${keys}</kbd></td><td>${desc}</td></tr>`;
+  bootbox.dialog({
+    title: "Keyboard shortcuts",
+    onEscape: true,
+    message: `
+    <table class="help">
+      <tr><th colspan="2">Custom</th></tr>
+      ${shortcut(`${shift}+${alt}+F`, 'Format document, or selected range(s)')}
+      ${shortcut('Tab', 'Insert to next tab stop, or indent selected range(s)')}
+      ${shortcut(`${shift}+Tab`, 'Outdent line(s) or selected range(s)')}
+      ${shortcut(`Enter`, 'Insert newline, keep cursor at same column pos')}
+      <tr><th colspan="2">Standard</th></tr>
+      <tr>
+        <td>Built-in</td>
+        <td>
+          Included CodeMirror shortcuts:<br>
+          <a target="_blank" href="https://codemirror.net/docs/ref/#commands.defaultKeymap">defaultKeymap</a>,
+          <a target="_blank" href="https://codemirror.net/docs/ref/#commands.standardKeymap">standardKeymap</a>,
+          <a target="_blank" href="https://codemirror.net/docs/ref/#commands.historyKeymap">historyKeymap</a>,
+          <a target="_blank" href="https://codemirror.net/docs/ref/#search.searchKeymap">searchKeymap</a>
+        </td>
+      </tr>
+    </table>`,
+    buttons: {
+      ok: { label: "OK", className: "btn-primary" }
+    }
+  });
 }
 
 function setupReplaySlider() {
