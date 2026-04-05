@@ -4,7 +4,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { bracketMatching, foldGutter, indentOnInput } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { EditorSelection, EditorState, Extension } from "@codemirror/state";
-import { crosshairCursor, drawSelection, dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, rectangularSelection, ViewUpdate } from "@codemirror/view";
+import { crosshairCursor, drawSelection, dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, rectangularSelection, ViewUpdate } from "@codemirror/view";
 import { CodeAnalyzer } from "../../common/analysis";
 import { hex, rpad } from "../../common/util";
 import { SourceFile, SourceLocation, WorkerError } from "../../common/workertypes";
@@ -23,7 +23,7 @@ import { mbo } from "../../themes/mbo";
 import { loadSettings, registerEditor, settingsExtensions } from "../settings";
 import { clearBreakpoint, current_project, isAsmMode, lastDebugState, platform, runToPC } from "../ui";
 import { createAssetHeaderPlugin } from "./assetdecorations";
-import { isMobileDevice, ProjectView } from "./baseviews";
+import { ProjectView } from "./baseviews";
 import { createTextTransformFilterEffect, textTransformFilterCompartment } from "./filters";
 import { breakpointMarkers, bytes, clock, currentPcMarker, errorMarkers, gutterLineInfo, offset, statusMarkers } from "./gutter";
 import { currentPc, errorMessages, errorSpans, highlightLines, showValue } from "./visuals";
@@ -92,7 +92,6 @@ export class SourceEditor implements ProjectView {
     var isAsm = isAsmMode(this.mode);
     var lineWrap = !!modedef.lineWrap;
     var theme = modedef.theme || MODEDEFS.default.theme;
-    var lineNums = !isAsm && !modedef.noLineNumbers && !isMobileDevice;
 
     var parser: Extension;
     switch (this.mode) {
@@ -161,8 +160,6 @@ export class SourceEditor implements ProjectView {
         // https://codemirror.net/docs/ref/#commands.defaultKeymap includes
         // https://codemirror.net/docs/ref/#commands.standardKeymap
         keymap.of(defaultKeymap),
-
-        lineNums ? lineNumbers() : [],
 
         // Undo history.
         history(),

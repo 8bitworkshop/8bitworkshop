@@ -1,7 +1,8 @@
 import { closeBrackets, deleteBracketPair } from "@codemirror/autocomplete";
 import { indentUnit } from "@codemirror/language";
 import { Compartment, EditorState, Extension } from "@codemirror/state";
-import { EditorView, highlightSpecialChars, highlightTrailingWhitespace, highlightWhitespace, keymap } from "@codemirror/view";
+import { EditorView, highlightSpecialChars, highlightTrailingWhitespace, highlightWhitespace, keymap, lineNumbers } from "@codemirror/view";
+import { isMobileDevice } from "./views/baseviews";
 import { debugHighlightTagsTooltip } from "./views/debug";
 import { insertTabKeymap, smartIndentKeymap } from "./views/tabs";
 
@@ -10,6 +11,7 @@ declare var $: JQueryStatic;
 
 export const tabSizeCompartment = new Compartment();
 export const tabsToSpacesCompartment = new Compartment();
+export const showLineNumbersCompartment = new Compartment();
 export const highlightSpecialCharsCompartment = new Compartment();
 export const highlightTrailingWhitespaceCompartment = new Compartment();
 export const highlightWhitespaceCompartment = new Compartment();
@@ -29,6 +31,7 @@ export function unregisterEditor(editor: EditorView) {
 export interface EditorSettings {
   tabSize: number;
   tabsToSpaces: boolean;
+  showLineNumbers: boolean;
   highlightSpecialChars: boolean;
   highlightTrailingWhitespace: boolean;
   highlightWhitespace: boolean;
@@ -41,6 +44,7 @@ const SETTINGS_KEY = "8bitworkshop/editorSettings";
 const defaultSettings: EditorSettings = {
   tabSize: 8,
   tabsToSpaces: true,
+  showLineNumbers: !isMobileDevice,
   highlightSpecialChars: true,
   highlightTrailingWhitespace: true,
   highlightWhitespace: false,
@@ -69,6 +73,7 @@ export function saveAndApplySettings(settings: EditorSettings) {
 const compartmentValues: [Compartment, (s: EditorSettings) => Extension][] = [
   [tabSizeCompartment, s => [EditorState.tabSize.of(s.tabSize), indentUnit.of(" ".repeat(s.tabSize))]],
   [tabsToSpacesCompartment, s => keymap.of(s.tabsToSpaces ? smartIndentKeymap : insertTabKeymap)],
+  [showLineNumbersCompartment, s => s.showLineNumbers ? lineNumbers() : []],
   [highlightSpecialCharsCompartment, s => s.highlightSpecialChars ? highlightSpecialChars() : []],
   [highlightTrailingWhitespaceCompartment, s => s.highlightTrailingWhitespace ? highlightTrailingWhitespace() : []],
   [highlightWhitespaceCompartment, s => s.highlightWhitespace ? highlightWhitespace() : []],
@@ -89,6 +94,7 @@ export function openSettings() {
        <h5>Editor settings</h5>
        <div class="form-group"><label>Tab size: <input type="number" id="setting_tabSize" min="1" max="40" value="${settings.tabSize}" style="width:4em"></label></div>
        <div class="checkbox"><label><input type="checkbox" id="setting_tabsToSpaces" ${settings.tabsToSpaces ? 'checked' : ''}> Insert spaces when pressing TAB</label></div>
+       <div class="checkbox"><label><input type="checkbox" id="setting_showLineNumbers" ${settings.showLineNumbers ? 'checked' : ''}> Show line numbers</label></div>
        <div class="checkbox"><label><input type="checkbox" id="setting_highlightSpecialChars" ${settings.highlightSpecialChars ? 'checked' : ''}> Show special characters</label></div>
        <div class="checkbox"><label><input type="checkbox" id="setting_highlightTrailingWhitespace" ${settings.highlightTrailingWhitespace ? 'checked' : ''}> Highlight trailing whitespace</label></div>
        <div class="checkbox"><label><input type="checkbox" id="setting_highlightWhitespace" ${settings.highlightWhitespace ? 'checked' : ''}> Show whitespace</label></div>
@@ -108,6 +114,7 @@ export function openSettings() {
         callback: () => {
           settings.tabSize = parseInt($('#setting_tabSize').val() as string) || 8;
           settings.tabsToSpaces = $('#setting_tabsToSpaces').is(':checked');
+          settings.showLineNumbers = $('#setting_showLineNumbers').is(':checked');
           settings.highlightSpecialChars = $('#setting_highlightSpecialChars').is(':checked');
           settings.highlightTrailingWhitespace = $('#setting_highlightTrailingWhitespace').is(':checked');
           settings.highlightWhitespace = $('#setting_highlightWhitespace').is(':checked');
