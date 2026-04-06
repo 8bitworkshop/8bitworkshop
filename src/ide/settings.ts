@@ -195,7 +195,14 @@ export function openSettings() {
   });
   dialog.on('shown.bs.modal', () => {
     updateUI(settings);
-    $('#setting_tabSize').focus().select();
+    $('#setting_tabSize').focus().select().on('input', () => {
+      settings.tabSize = parseInt($('#setting_tabSize').val() as string) || MIN_TAB_SIZE;
+      // Re-detect tab stops based on new tab size.
+      settings.asmTabStops = detectTabStops(mode, settings.tabSize, editor.state.doc.toString());
+      $('#setting_asmOpcodes').val(settings.asmTabStops.opcodes || "");
+      $('#setting_asmOperands').val(settings.asmTabStops.operands || "");
+      $('#setting_asmComments').val(settings.asmTabStops.comments || "");
+    });
   });
   dialog.on('keydown', (e) => {
     if (e.key === 'Enter') {
