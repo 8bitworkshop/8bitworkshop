@@ -2,9 +2,10 @@ import { closeBrackets, deleteBracketPair } from "@codemirror/autocomplete";
 import { Compartment, Extension, Facet } from "@codemirror/state";
 import { EditorView, highlightSpecialChars, highlightTrailingWhitespace, highlightWhitespace, keymap, lineNumbers } from "@codemirror/view";
 import { AsmTabStops, detectTabStopsFromAsm } from "../common/tabdetect";
-import { getModeForPath, isAsmMode } from "./ui";
+import { current_project, getModeForPath, isAsmMode, projectWindows } from "./ui";
 import { isMobileDevice } from "./views/baseviews";
 import { debugHighlightTagsTooltip } from "./views/debug";
+import { SourceEditor } from "./views/editors";
 import { tabExtension } from "./views/tabs";
 
 const MIN_TAB_SIZE = 1;
@@ -106,6 +107,11 @@ export function detectAndApplyAsmTabStops(filename: string, text: string) {
 }
 
 export function openSettings() {
+  const view = projectWindows.id2window[current_project.mainPath];
+  const editor = (view as SourceEditor).editor;
+  const text = editor.state.doc.toString();
+  const mode = getModeForPath(current_project.mainPath);
+
   function updateUI(s: EditorSettings) {
     $('#setting_tabSize').val(s.tabSize);
     $('#setting_tabInsertsTabs').prop('checked', !s.tabsToSpaces);
@@ -158,6 +164,7 @@ export function openSettings() {
         className: "btn-default",
         callback: () => {
           settings = { ...defaultSettings };
+          settings.asmTabStops = detectTabStopsFromAsm(mode, defaultSettings.tabSize, text);
           updateUI(settings);
           return false;
         }
