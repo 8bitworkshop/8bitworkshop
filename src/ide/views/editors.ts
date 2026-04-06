@@ -20,6 +20,7 @@ import { cobalt } from "../../themes/cobalt";
 import { disassemblyTheme } from "../../themes/disassemblyTheme";
 import { editorTheme } from "../../themes/editorTheme";
 import { mbo } from "../../themes/mbo";
+import { formatDocument } from "../format";
 import { loadSettings, registerEditor, settingsExtensions } from "../settings";
 import { clearBreakpoint, current_project, isAsmMode, lastDebugState, platform, runToPC } from "../ui";
 import { createAssetHeaderPlugin } from "./assetdecorations";
@@ -134,6 +135,17 @@ export class SourceEditor implements ProjectView {
       parent: parent,
       doc: text,
       extensions: [
+
+        // Use domEventHandler instead of keymap.of with "Shift-Alt-f"
+        // to prevent macOS intercepting and inserting `Ï`.
+        EditorView.domEventHandlers({
+          keydown(event, view) {
+            if (event.shiftKey && event.altKey && event.code === 'KeyF') {
+              event.preventDefault();
+              formatDocument(view, isAsm);
+            }
+          }
+        }),
 
         isAsm ? keymap.of([{
           key: "Enter",
