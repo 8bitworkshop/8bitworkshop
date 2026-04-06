@@ -87,29 +87,42 @@ export function settingsExtensions(settings: EditorSettings): Extension[] {
 }
 
 export function openSettings() {
-  var settings = loadSettings();
+  function updateUI(s: EditorSettings) {
+    $('#setting_tabSize').val(s.tabSize);
+    $('#setting_tabInsertsTabs').prop('checked', !s.tabsToSpaces);
+    $('#setting_tabInsertsSpaces').prop('checked', s.tabsToSpaces);
+    $('#setting_showLineNumbers').prop('checked', s.showLineNumbers);
+    $('#setting_highlightSpecialChars').prop('checked', s.highlightSpecialChars);
+    $('#setting_highlightTrailingWhitespace').prop('checked', s.highlightTrailingWhitespace);
+    $('#setting_highlightWhitespace').prop('checked', s.highlightWhitespace);
+    $('#setting_closeBrackets').prop('checked', s.closeBrackets);
+    $('#setting_debugHighlightTags').prop('checked', s.debugHighlightTags);
+    $('input[name="tabMode"]').first().trigger('change');
+  }
+
+  let settings = loadSettings();
   const dialog = bootbox.dialog({
     onEscape: true,
     // title: "Settings",
     message: `<form id="settingsForm" onsubmit="return false">
       <h5>Editor settings</h5>
       <div>
-        <label class="main">Tab size</label> <input type="number" id="setting_tabSize" min="${MIN_TAB_SIZE}" max="${MAX_TAB_SIZE}" value="${settings.tabSize}" style="width:4em">
+        <label class="main">Tab size</label> <input type="number" id="setting_tabSize" min="${MIN_TAB_SIZE}" max="${MAX_TAB_SIZE}" style="width:4em">
       </div>
       <div>
         <label class="main">Tab key inserts</label>
-        <label><input type="radio" name="tabMode" id="setting_tabInsertsTabs" ${!settings.tabsToSpaces ? 'checked' : ''}> tabs</label>
-        <label><input type="radio" name="tabMode" id="setting_tabInsertsSpaces" ${settings.tabsToSpaces ? 'checked' : ''}> spaces</label>
+        <label><input type="radio" name="tabMode" id="setting_tabInsertsTabs"> tabs</label>
+        <label><input type="radio" name="tabMode" id="setting_tabInsertsSpaces"> spaces</label>
       </div>
 
-      <div class="checkbox"><label><input type="checkbox" id="setting_showLineNumbers" ${settings.showLineNumbers ? 'checked' : ''}> Show line numbers</label></div>
-      <div class="checkbox"><label><input type="checkbox" id="setting_highlightSpecialChars" ${settings.highlightSpecialChars ? 'checked' : ''}> Show special characters</label></div>
-      <div class="checkbox"><label><input type="checkbox" id="setting_highlightTrailingWhitespace" ${settings.highlightTrailingWhitespace ? 'checked' : ''}> Highlight trailing whitespace</label></div>
-      <div class="checkbox"><label><input type="checkbox" id="setting_highlightWhitespace" ${settings.highlightWhitespace ? 'checked' : ''}> Show whitespace</label></div>
-      <div class="checkbox"><label><input type="checkbox" id="setting_closeBrackets" ${settings.closeBrackets ? 'checked' : ''}> Automatically add and remove closing brackets</label></div>
+      <div class="checkbox"><label><input type="checkbox" id="setting_showLineNumbers"> Show line numbers</label></div>
+      <div class="checkbox"><label><input type="checkbox" id="setting_highlightSpecialChars"> Show special characters</label></div>
+      <div class="checkbox"><label><input type="checkbox" id="setting_highlightTrailingWhitespace"> Highlight trailing whitespace</label></div>
+      <div class="checkbox"><label><input type="checkbox" id="setting_highlightWhitespace"> Show whitespace</label></div>
+      <div class="checkbox"><label><input type="checkbox" id="setting_closeBrackets"> Automatically add and remove closing brackets</label></div>
 
       <h5>8bitworkshop IDE internal settings</h5>
-      <div class="checkbox"><label><input type="checkbox" id="setting_debugHighlightTags" ${settings.debugHighlightTags ? 'checked' : ''}> Debug parser and syntax highlighting</label></div>
+      <div class="checkbox"><label><input type="checkbox" id="setting_debugHighlightTags"> Debug parser and syntax highlighting</label></div>
     </form>`,
     buttons: {
       cancel: {
@@ -132,6 +145,9 @@ export function openSettings() {
         }
       }
     }
+  });
+  dialog.on('shown.bs.modal', () => {
+    updateUI(settings);
   });
   dialog.on('keydown', (e) => {
     if (e.key === 'Enter') {
