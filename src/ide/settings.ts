@@ -195,6 +195,7 @@ export function openSettings() {
   });
   dialog.on('shown.bs.modal', () => {
     updateUI(settings);
+    $('#setting_tabSize').focus().select();
   });
   dialog.on('keydown', (e) => {
     if (e.key === 'Enter') {
