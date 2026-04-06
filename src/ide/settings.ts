@@ -194,6 +194,10 @@ export function openSettings() {
     }
   });
   dialog.on('shown.bs.modal', () => {
+    if (!isAsmMode(mode)) {
+      $('#setting_asmColumns').addClass('disabled');
+      $('#setting_asmOpcodes, #setting_asmOperands, #setting_asmComments').prop('disabled', true);
+    }
     updateUI(settings);
     $('#setting_tabSize').focus().select().on('input', () => {
       settings.tabSize = parseInt($('#setting_tabSize').val() as string) || MIN_TAB_SIZE;
