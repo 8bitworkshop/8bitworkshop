@@ -6,7 +6,7 @@ import { current_project, getModeForPath, isAsmMode, projectWindows } from "./ui
 import { isMobileDevice } from "./views/baseviews";
 import { debugHighlightTagsTooltip } from "./views/debug";
 import { SourceEditor } from "./views/editors";
-import { tabExtension } from "./views/tabs";
+import { MAX_COLS, tabExtension } from "./views/tabs";
 
 const MIN_TAB_SIZE = 1;
 const MAX_TAB_SIZE = 40;
@@ -179,9 +179,17 @@ export function openSettings() {
         callback: () => {
           settings.tabSize = Math.min(MAX_TAB_SIZE, Math.max(MIN_TAB_SIZE, parseInt($('#setting_tabSize').val() as string) || MIN_TAB_SIZE));
           settings.tabsToSpaces = $('#setting_tabInsertsSpaces').is(':checked');
-          settings.asmTabStops.opcodes = parseInt($('#setting_asmOpcodes').val() as string) || undefined;
-          settings.asmTabStops.operands = parseInt($('#setting_asmOperands').val() as string) || undefined;
-          settings.asmTabStops.comments = parseInt($('#setting_asmComments').val() as string) || undefined;
+
+          // Ensure asm tab stops are monotonicly increasing and in range [1..MAX_COLS].
+          const asmTabStops = [
+            parseInt($('#setting_asmOpcodes').val() as string) || undefined,
+            parseInt($('#setting_asmOperands').val() as string) || undefined,
+            parseInt($('#setting_asmComments').val() as string) || undefined,
+          ].filter(n => n > 0 && n <= MAX_COLS).sort((a, b) => a - b);
+          settings.asmTabStops.opcodes = asmTabStops[0];
+          settings.asmTabStops.operands = asmTabStops[1];
+          settings.asmTabStops.comments = asmTabStops[2];
+
           settings.showLineNumbers = $('#setting_showLineNumbers').is(':checked');
           settings.highlightSpecialChars = $('#setting_highlightSpecialChars').is(':checked');
           settings.highlightTrailingWhitespace = $('#setting_highlightTrailingWhitespace').is(':checked');
