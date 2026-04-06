@@ -893,3 +893,12 @@ div.scripting-cell button.scripting-enabled {
   font-weight: bold;
   margin-right: 4px;
 }
+#settingsForm .tab-stops .tab-stop {
+  margin-left: 0.5em;
+}
+#settingsForm .tab-stops input[type="text"] {
+  width: 2em;
+}
+#settingsForm .disabled {
+  opacity: 0.5;
+}

@@ -1,6 +1,7 @@
 import { closeBrackets, deleteBracketPair } from "@codemirror/autocomplete";
-import { Compartment, Extension } from "@codemirror/state";
+import { Compartment, Extension, Facet } from "@codemirror/state";
 import { EditorView, highlightSpecialChars, highlightTrailingWhitespace, highlightWhitespace, keymap, lineNumbers } from "@codemirror/view";
+import { AsmTabStops } from "../common/tabdetect";
 import { isMobileDevice } from "./views/baseviews";
 import { debugHighlightTagsTooltip } from "./views/debug";
 import { tabExtension } from "./views/tabs";
@@ -30,9 +31,14 @@ export function unregisterEditor(editor: EditorView) {
   editors.delete(editor);
 }
 
+export const tabStopsFacet = Facet.define<AsmTabStops, AsmTabStops>({
+  combine: values => values[0],
+});
+
 export interface EditorSettings {
   tabSize: number;
   tabsToSpaces: boolean;
+  asmTabStops: AsmTabStops;
   showLineNumbers: boolean;
   highlightSpecialChars: boolean;
   highlightTrailingWhitespace: boolean;
@@ -46,6 +52,7 @@ const SETTINGS_KEY = "8bitworkshop/editorSettings";
 const defaultSettings: EditorSettings = {
   tabSize: DEFAULT_TAB_SIZE,
   tabsToSpaces: true,
+  asmTabStops: {},
   showLineNumbers: !isMobileDevice,
   highlightSpecialChars: true,
   highlightTrailingWhitespace: true,
@@ -73,7 +80,7 @@ export function saveAndApplySettings(settings: EditorSettings) {
 }
 
 const compartmentValues: [Compartment, (s: EditorSettings) => Extension][] = [
-  [tabCompartment, s => tabExtension(s.tabSize, s.tabsToSpaces)],
+  [tabCompartment, s => tabExtension(s.tabSize, s.tabsToSpaces, s.asmTabStops)],
   [showLineNumbersCompartment, s => s.showLineNumbers ? lineNumbers() : []],
   [highlightSpecialCharsCompartment, s => s.highlightSpecialChars ? highlightSpecialChars() : []],
   [highlightTrailingWhitespaceCompartment, s => s.highlightTrailingWhitespace ? highlightTrailingWhitespace() : []],
@@ -91,6 +98,9 @@ export function openSettings() {
     $('#setting_tabSize').val(s.tabSize);
     $('#setting_tabInsertsTabs').prop('checked', !s.tabsToSpaces);
     $('#setting_tabInsertsSpaces').prop('checked', s.tabsToSpaces);
+    $('#setting_asmOpcodes').val(s.asmTabStops.opcodes || "");
+    $('#setting_asmOperands').val(s.asmTabStops.operands || "");
+    $('#setting_asmComments').val(s.asmTabStops.comments || "");
     $('#setting_showLineNumbers').prop('checked', s.showLineNumbers);
     $('#setting_highlightSpecialChars').prop('checked', s.highlightSpecialChars);
     $('#setting_highlightTrailingWhitespace').prop('checked', s.highlightTrailingWhitespace);
@@ -113,6 +123,12 @@ export function openSettings() {
         <label class="main">Tab key inserts</label>
         <label><input type="radio" name="tabMode" id="setting_tabInsertsTabs"> tabs</label>
         <label><input type="radio" name="tabMode" id="setting_tabInsertsSpaces"> spaces</label>
+      </div>
+      <div class="tab-stops" id="setting_asmColumns">
+        <label class="main">Format assembly</label>
+        <label class="tab-stop">opcodes</label>: <input type="text" id="setting_asmOpcodes">
+        <label class="tab-stop">operands</label>: <input type="text" id="setting_asmOperands">
+        <label class="tab-stop">comments</label>: <input type="text" id="setting_asmComments">
       </div>
 
       <div class="checkbox"><label><input type="checkbox" id="setting_showLineNumbers"> Show line numbers</label></div>
@@ -144,6 +160,9 @@ export function openSettings() {
         callback: () => {
           settings.tabSize = Math.min(MAX_TAB_SIZE, Math.max(MIN_TAB_SIZE, parseInt($('#setting_tabSize').val() as string) || MIN_TAB_SIZE));
           settings.tabsToSpaces = $('#setting_tabInsertsSpaces').is(':checked');
+          settings.asmTabStops.opcodes = parseInt($('#setting_asmOpcodes').val() as string) || undefined;
+          settings.asmTabStops.operands = parseInt($('#setting_asmOperands').val() as string) || undefined;
+          settings.asmTabStops.comments = parseInt($('#setting_asmComments').val() as string) || undefined;
           settings.showLineNumbers = $('#setting_showLineNumbers').is(':checked');
           settings.highlightSpecialChars = $('#setting_highlightSpecialChars').is(':checked');
           settings.highlightTrailingWhitespace = $('#setting_highlightTrailingWhitespace').is(':checked');
