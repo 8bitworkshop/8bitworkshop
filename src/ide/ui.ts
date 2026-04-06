@@ -13,16 +13,16 @@ import { FileData, WorkerError, WorkerResult } from "../common/workertypes";
 import { importPlatform } from "../platform/_index";
 import { gaEvent, gaPageView } from "./analytics";
 import { alertError, alertInfo, fatalError, setWaitDialog } from "./dialogs";
-import { openSettings } from "./settings";
 import { CodeProject, createNewPersistentStore, LocalForageFilesystem, OverlayFilesystem, ProjectFilesystem, WebPresetsFileSystem } from "./project";
 import { getRepos, parseGithubURL } from "./services";
+import { detectAndApplyAsmTabStops, openSettings } from "./settings";
 import { _downloadAllFilesZipFile, _downloadCassetteFile, _downloadProjectZipFile, _downloadROMImage, _downloadSourceFile, _downloadSymFile, _getCassetteFunction, _recordVideo, _shareEmbedLink } from "./shareexport";
 import { _importProjectFromGithub, _loginToGithub, _logoutOfGithub, _publishProjectToGithub, _pullProjectFromGithub, _pushProjectToGithub, _removeRepository, importProjectFromGithub } from "./sync";
 import { Toolbar } from "./toolbar";
 import { AssetEditorView } from "./views/asseteditor";
 import { isMobileDevice } from "./views/baseviews";
 import { AddressHeatMapView, BinaryFileView, MemoryMapView, MemoryView, ProbeLogView, ProbeSymbolView, RasterStackMapView, ScanlineIOView, VRAMMemoryView } from "./views/debugviews";
-import { DisassemblerView, ListingView, PC_LINE_LOOKAHEAD, SourceEditor, setUppercaseOnly } from "./views/editors";
+import { DisassemblerView, ListingView, PC_LINE_LOOKAHEAD, setUppercaseOnly, SourceEditor } from "./views/editors";
 import { CallStackView, DebugBrowserView } from "./views/treeviews";
 import { ProjectWindows } from "./windows";
 import Split = require('split.js');
@@ -435,6 +435,8 @@ async function loadMainWindow(preset_id: string) {
   var maindata = current_project.getFile(preset_id);
   if (typeof maindata === 'string') {
     await current_project.loadFileDependencies(maindata);
+    // Update column settings for asm {opcode, operand, comments}.
+    detectAndApplyAsmTabStops(preset_id, maindata);
   }
   // we need this to build create functions for the editor
   refreshWindowList();

@@ -1,7 +1,8 @@
 import { closeBrackets, deleteBracketPair } from "@codemirror/autocomplete";
 import { Compartment, Extension, Facet } from "@codemirror/state";
 import { EditorView, highlightSpecialChars, highlightTrailingWhitespace, highlightWhitespace, keymap, lineNumbers } from "@codemirror/view";
-import { AsmTabStops } from "../common/tabdetect";
+import { AsmTabStops, detectTabStopsFromAsm } from "../common/tabdetect";
+import { getModeForPath, isAsmMode } from "./ui";
 import { isMobileDevice } from "./views/baseviews";
 import { debugHighlightTagsTooltip } from "./views/debug";
 import { tabExtension } from "./views/tabs";
@@ -91,6 +92,17 @@ const compartmentValues: [Compartment, (s: EditorSettings) => Extension][] = [
 
 export function settingsExtensions(settings: EditorSettings): Extension[] {
   return compartmentValues.map(([c, fn]) => c.of(fn(settings)));
+}
+
+export function detectTabStops(mode: string, tabSize: number, text: string) {
+  return isAsmMode(mode) ? detectTabStopsFromAsm(mode, tabSize, text) : {};
+}
+
+// Called from loadMainWindow to set initial tab stops.
+export function detectAndApplyAsmTabStops(filename: string, text: string) {
+  const settings = loadSettings();
+  settings.asmTabStops = detectTabStops(getModeForPath(filename), settings.tabSize, text);
+  saveAndApplySettings(settings);
 }
 
 export function openSettings() {
