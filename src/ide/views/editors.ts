@@ -26,6 +26,7 @@ import { createAssetHeaderPlugin } from "./assetdecorations";
 import { ProjectView } from "./baseviews";
 import { createTextTransformFilterEffect, textTransformFilterCompartment } from "./filters";
 import { breakpointMarkers, bytes, clock, currentPcMarker, errorMarkers, gutterLineInfo, offset, statusMarkers } from "./gutter";
+import { tabStopRuler } from "./tabstopruler";
 import { currentPc, errorMessages, errorSpans, highlightLines, showValue } from "./visuals";
 
 // look ahead this many bytes when finding source lines for a PC
@@ -193,6 +194,7 @@ export class SourceEditor implements ProjectView {
         parser || [],
         theme,
         editorTheme,
+        tabStopRuler,
         lineWrap ? EditorView.lineWrapping : [],
 
         currentPc.field,

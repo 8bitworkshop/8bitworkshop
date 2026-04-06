@@ -43,6 +43,14 @@ export const mboTheme = EditorView.theme({
     backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20"><path stroke="%23aaaaaa45" stroke-width="1" fill="none" d="M0 10H10L7 6M10 10L7 14"/></svg>')`,
     backgroundPosition: "left 50%"
   },
+  ".cm-panels": {
+    backgroundColor: "#4e4e4e" /* color left of tab stop ruler */,
+  },
+  ".tab-stop-ruler": {
+    color: "rgba(255,255,255,0.25)",
+    backgroundColor: "#202020",
+    borderBottom: "2px solid #4e4e4e",
+  },
 }, { dark: true });
 
 export const mboHighlightStyle = HighlightStyle.define([

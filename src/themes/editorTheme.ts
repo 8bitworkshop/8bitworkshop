@@ -38,4 +38,10 @@ export const editorTheme = EditorView.theme({
     "& .cm-lineNumbers .cm-gutterElement": {
         color: "#99cc99",
     },
+    ".tab-stop-ruler": {
+        whiteSpace: "pre",
+        overflow: "hidden",
+        userSelect: "none",
+        cursor: "pointer",
+    }
 });
