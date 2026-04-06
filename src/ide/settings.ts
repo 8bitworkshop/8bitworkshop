@@ -125,6 +125,15 @@ export function openSettings() {
       <div class="checkbox"><label><input type="checkbox" id="setting_debugHighlightTags"> Debug parser and syntax highlighting</label></div>
     </form>`,
     buttons: {
+      reset: {
+        label: "Reset",
+        className: "btn-default",
+        callback: () => {
+          settings = { ...defaultSettings };
+          updateUI(settings);
+          return false;
+        }
+      },
       cancel: {
         label: "Cancel",
         className: "btn-default"
