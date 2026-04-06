@@ -886,3 +886,10 @@ div.scripting-cell button.scripting-enabled {
 .dialog-help {
   color: #6666ff;
 }
+#settingsForm label {
+  font-weight: normal;
+}
+#settingsForm label.main {
+  font-weight: bold;
+  margin-right: 4px;
+}

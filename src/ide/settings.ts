@@ -1,16 +1,18 @@
 import { closeBrackets, deleteBracketPair } from "@codemirror/autocomplete";
-import { indentUnit } from "@codemirror/language";
-import { Compartment, EditorState, Extension } from "@codemirror/state";
+import { Compartment, Extension } from "@codemirror/state";
 import { EditorView, highlightSpecialChars, highlightTrailingWhitespace, highlightWhitespace, keymap, lineNumbers } from "@codemirror/view";
 import { isMobileDevice } from "./views/baseviews";
 import { debugHighlightTagsTooltip } from "./views/debug";
-import { insertTabKeymap, smartIndentKeymap } from "./views/tabs";
+import { tabExtension } from "./views/tabs";
+
+const MIN_TAB_SIZE = 1;
+const MAX_TAB_SIZE = 40;
+const DEFAULT_TAB_SIZE = 8;
 
 declare var bootbox;
 declare var $: JQueryStatic;
 
-export const tabSizeCompartment = new Compartment();
-export const tabsToSpacesCompartment = new Compartment();
+export const tabCompartment = new Compartment();
 export const showLineNumbersCompartment = new Compartment();
 export const highlightSpecialCharsCompartment = new Compartment();
 export const highlightTrailingWhitespaceCompartment = new Compartment();
@@ -42,7 +44,7 @@ export interface EditorSettings {
 const SETTINGS_KEY = "8bitworkshop/editorSettings";
 
 const defaultSettings: EditorSettings = {
-  tabSize: 8,
+  tabSize: DEFAULT_TAB_SIZE,
   tabsToSpaces: true,
   showLineNumbers: !isMobileDevice,
   highlightSpecialChars: true,
@@ -71,8 +73,7 @@ export function saveAndApplySettings(settings: EditorSettings) {
 }
 
 const compartmentValues: [Compartment, (s: EditorSettings) => Extension][] = [
-  [tabSizeCompartment, s => [EditorState.tabSize.of(s.tabSize), indentUnit.of(" ".repeat(s.tabSize))]],
-  [tabsToSpacesCompartment, s => keymap.of(s.tabsToSpaces ? smartIndentKeymap : insertTabKeymap)],
+  [tabCompartment, s => tabExtension(s.tabSize, s.tabsToSpaces)],
   [showLineNumbersCompartment, s => s.showLineNumbers ? lineNumbers() : []],
   [highlightSpecialCharsCompartment, s => s.highlightSpecialChars ? highlightSpecialChars() : []],
   [highlightTrailingWhitespaceCompartment, s => s.highlightTrailingWhitespace ? highlightTrailingWhitespace() : []],
@@ -92,13 +93,21 @@ export function openSettings() {
     // title: "Settings",
     message: `<form id="settingsForm" onsubmit="return false">
       <h5>Editor settings</h5>
-      <div class="form-group"><label>Tab size: <input type="number" id="setting_tabSize" min="1" max="40" value="${settings.tabSize}" style="width:4em"></label></div>
-      <div class="checkbox"><label><input type="checkbox" id="setting_tabsToSpaces" ${settings.tabsToSpaces ? 'checked' : ''}> Insert spaces when pressing TAB</label></div>
+      <div>
+        <label class="main">Tab size</label> <input type="number" id="setting_tabSize" min="${MIN_TAB_SIZE}" max="${MAX_TAB_SIZE}" value="${settings.tabSize}" style="width:4em">
+      </div>
+      <div>
+        <label class="main">Tab key inserts</label>
+        <label><input type="radio" name="tabMode" id="setting_tabInsertsTabs" ${!settings.tabsToSpaces ? 'checked' : ''}> tabs</label>
+        <label><input type="radio" name="tabMode" id="setting_tabInsertsSpaces" ${settings.tabsToSpaces ? 'checked' : ''}> spaces</label>
+      </div>
+
       <div class="checkbox"><label><input type="checkbox" id="setting_showLineNumbers" ${settings.showLineNumbers ? 'checked' : ''}> Show line numbers</label></div>
       <div class="checkbox"><label><input type="checkbox" id="setting_highlightSpecialChars" ${settings.highlightSpecialChars ? 'checked' : ''}> Show special characters</label></div>
       <div class="checkbox"><label><input type="checkbox" id="setting_highlightTrailingWhitespace" ${settings.highlightTrailingWhitespace ? 'checked' : ''}> Highlight trailing whitespace</label></div>
       <div class="checkbox"><label><input type="checkbox" id="setting_highlightWhitespace" ${settings.highlightWhitespace ? 'checked' : ''}> Show whitespace</label></div>
       <div class="checkbox"><label><input type="checkbox" id="setting_closeBrackets" ${settings.closeBrackets ? 'checked' : ''}> Automatically add and remove closing brackets</label></div>
+
       <h5>8bitworkshop IDE internal settings</h5>
       <div class="checkbox"><label><input type="checkbox" id="setting_debugHighlightTags" ${settings.debugHighlightTags ? 'checked' : ''}> Debug parser and syntax highlighting</label></div>
     </form>`,
@@ -111,8 +120,8 @@ export function openSettings() {
         label: "SAVE",
         className: "btn-primary",
         callback: () => {
-          settings.tabSize = parseInt($('#setting_tabSize').val() as string) || 8;
-          settings.tabsToSpaces = $('#setting_tabsToSpaces').is(':checked');
+          settings.tabSize = Math.min(MAX_TAB_SIZE, Math.max(MIN_TAB_SIZE, parseInt($('#setting_tabSize').val() as string) || MIN_TAB_SIZE));
+          settings.tabsToSpaces = $('#setting_tabInsertsSpaces').is(':checked');
           settings.showLineNumbers = $('#setting_showLineNumbers').is(':checked');
           settings.highlightSpecialChars = $('#setting_highlightSpecialChars').is(':checked');
           settings.highlightTrailingWhitespace = $('#setting_highlightTrailingWhitespace').is(':checked');
