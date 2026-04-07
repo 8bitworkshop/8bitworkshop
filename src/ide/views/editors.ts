@@ -486,7 +486,7 @@ export class SourceEditor implements ProjectView {
     if (line) {
       // Validate line number is within document range (TODO: open disassembler)
       if (line.line < 1 || line.line > this.editor.state.doc.lines) {
-        return false;
+        return;
       }
       addCurrentMarker(line);
       if (moveCursor) {
@@ -498,7 +498,6 @@ export class SourceEditor implements ProjectView {
         });
       }
       this.currentDebugLine = line;
-      return true;
     }
   }
 
