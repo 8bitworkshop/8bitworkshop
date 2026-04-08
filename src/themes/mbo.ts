@@ -7,34 +7,29 @@ export const mboTheme = EditorView.theme({
     backgroundColor: "#2c2c2c",
     color: "#ffffec"
   },
-  ".cm-content": {
-    caretColor: "#ffffec"
-  },
-  "&.cm-focused .cm-cursor": {
-    borderLeft: "1px solid #ffffec"
-  },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
-    backgroundColor: "rgba(113, 108, 98, .99) !important"
+    backgroundColor: "#786c4d94 !important"
   },
-  ".cm-gutters": {
-    backgroundColor: "#4e4e4e",
-    color: "#dadada",
-    borderRight: "none"
+  ".cm-selectionMatch": {
+    backgroundColor: "#ffffff30"
   },
   ".cm-activeLine": {
     backgroundColor: "#494b4155"
   },
   ".cm-activeLineGutter": {
-    backgroundColor: "#494b4155"
+    backgroundColor: "#68686588"
   },
-  "&.cm-focused .cm-gutterElement.cm-activeLineGutter": {
-    color: "#33ff33"
+  "&.cm-focused .cm-matchingBracket": {
+    outline: "1px solid grey"
   },
-  ".cm-linenumber": {
-    color: "#dadada"
+  ".cm-gutters , .cm-panels": {
+    backgroundColor: "#4e4e4e"
   },
-  ".cm-matchingBracket": {
-    color: "#33ff33 !important"
+  ".cm-lineNumbers .cm-gutterElement": {
+    color: "#dadada4d"
+  },
+  ".gutter-bytes .cm-gutterElement": {
+    color: "#d2b137a6"
   },
   ".cm-highlightSpace": {
     backgroundImage: "radial-gradient(circle at 50% 55%, #aaaaaa45 11%, transparent 5%)"
@@ -42,9 +37,6 @@ export const mboTheme = EditorView.theme({
   ".cm-highlightTab": {
     backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20"><path stroke="%23aaaaaa45" stroke-width="1" fill="none" d="M0 10H10L7 6M10 10L7 14"/></svg>')`,
     backgroundPosition: "left 50%"
-  },
-  ".cm-panels": {
-    backgroundColor: "#4e4e4e" /* color left of tab stop ruler */,
   },
   ".tab-stop-ruler": {
     color: "rgba(255,255,255,0.25)",

@@ -1,5 +1,6 @@
 import { EditorView } from "@codemirror/view";
 
+// TODO: Move remaining colors into themes.
 export const editorTheme = EditorView.theme({
     "&": {
         height: "100%",
@@ -20,23 +21,19 @@ export const editorTheme = EditorView.theme({
         textDecoration: "underline wavy red",
         backgroundColor: "rgba(255, 0, 0, 0.15)",
     },
-    ".gutter-offset": {
-        marginRight: "0.25em",
+    ".gutter-offset .cm-gutterElement": {
+        paddingRight: "0.25em",
     },
-    ".gutter-bytes": {
-        marginLeft: "0.25em",
-        marginRight: "0.25em",
-        opacity: 0.7,
+    ".gutter-bytes .cm-gutterElement": {
+        paddingLeft: "0.25em",
+        paddingRight: "0.25em",
     },
-    ".gutter-currentpc": {
+    ".gutter-currentpc .cm-gutterElement": {
         color: "#ff66ee",
     },
-    ".gutter-clock": {
-        marginLeft: "0.25em",
-        marginRight: "0.25em",
-    },
-    "& .cm-lineNumbers .cm-gutterElement": {
-        color: "#99cc99",
+    ".gutter-clock .cm-gutterElement": {
+        paddingLeft: "0.25em",
+        paddingRight: "0.25em",
     },
     ".tab-stop-ruler": {
         whiteSpace: "pre",
