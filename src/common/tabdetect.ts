@@ -43,7 +43,7 @@ const MNEMONICS_6502 = new Set([...opcodes6502].map(s => s.toLowerCase()));
 const MNEMONICS_6809 = new Set([...opcodes6809].map(s => s.toLowerCase()));
 const MNEMONICS_Z80 = new Set([...opcodesZ80].map(s => s.toLowerCase()));
 
-const mnemonicsByMode: Record<string, Set<string>> = {
+export const mnemonicsByMode: Record<string, Set<string>> = {
   '6502': MNEMONICS_6502,
   '6809': MNEMONICS_6809,
   'z80': MNEMONICS_Z80,

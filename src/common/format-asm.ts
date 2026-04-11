@@ -54,7 +54,7 @@ function buildFormattedLine(indented: boolean, label: string, opcode: string, op
     return result;
 }
 
-export function formatAsmLine(raw: string, lineNum: number, indentUnit: string, tabSize: number, asmTabStops: AsmTabStops): string {
+export function formatAsmLine(raw: string, lineNum: number, indentUnit: string, tabSize: number, asmTabStops: AsmTabStops, mnemonics?: Set<string>): string {
     const text = raw.trimEnd();
     if (text === '') return '';
 
@@ -77,6 +77,21 @@ export function formatAsmLine(raw: string, lineNum: number, indentUnit: string, 
         [opcode, operand] = splitFirst(content);
     }
 
+    // If line does not contain a known opcode, preserve whitespace after iniital indent.
+    if (mnemonics && opcode && !mnemonics.has(opcode.toLowerCase())) {
+        const rest = text.substring(firstNonSpace);
+        if (indented) {
+            return padToColumn('', asmTabStops.opcodes, indentUnit, tabSize) + rest;
+        }
+        if (opcode) {
+            // Non-indented with label: fix indent between label and rest.
+            const afterLabel = label.length;
+            const opcodePos = afterLabel + text.substring(afterLabel).search(/\S/);
+            return label + padToColumn(label, asmTabStops.opcodes, indentUnit, tabSize).substring(label.length) + text.substring(opcodePos);
+        }
+        return text;
+    }
+
     const newText = buildFormattedLine(indented, label, opcode, operand, comment, indentUnit, tabSize, asmTabStops);
     if (newText.replace(/\s/g, '') !== text.replace(/\s/g, '')) {
         console.warn(`format: skipping line ${lineNum}, mangles non-whitespace characters\n- before: ${JSON.stringify(text)}\n- after:  ${JSON.stringify(newText)}`);
@@ -85,10 +100,10 @@ export function formatAsmLine(raw: string, lineNum: number, indentUnit: string, 
     return newText;
 }
 
-export function formatText(text: string, tabSize: number, asmTabStops: AsmTabStops): string {
+export function formatText(text: string, tabSize: number, asmTabStops: AsmTabStops, mnemonics?: Set<string>): string {
     if (!asmTabStops) return text;
     const indent = ' '.repeat(tabSize);
     const lines = text.split('\n');
-    const formatted = lines.map((line, i) => formatAsmLine(line, i + 1, indent, tabSize, asmTabStops));
+    const formatted = lines.map((line, i) => formatAsmLine(line, i + 1, indent, tabSize, asmTabStops, mnemonics));
     return formatted.join('\n');
 }

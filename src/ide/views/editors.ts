@@ -23,6 +23,7 @@ import { mbo } from "../../themes/mbo";
 import { formatDocument } from "../format";
 import { loadSettings, registerEditor, settingsExtensions } from "../settings";
 import { clearBreakpoint, current_project, isAsmMode, lastDebugState, platform, runToPC } from "../ui";
+import { mnemonicsByMode } from "../../common/tabdetect";
 import { createAssetHeaderPlugin } from "./assetdecorations";
 import { ProjectView } from "./baseviews";
 import { createTextTransformFilterEffect, textTransformFilterCompartment } from "./filters";
@@ -92,6 +93,7 @@ export class SourceEditor implements ProjectView {
   newEditor(parent: HTMLElement, text: string, includesAsm?: boolean) {
     var modedef = MODEDEFS[this.mode] || MODEDEFS.default;
     var isAsm = isAsmMode(this.mode);
+    var mnemonics = mnemonicsByMode[this.mode];
     var lineWrap = !!modedef.lineWrap;
     var theme = modedef.theme || MODEDEFS.default.theme;
 
@@ -142,7 +144,7 @@ export class SourceEditor implements ProjectView {
           keydown(event, view) {
             if (event.shiftKey && event.altKey && event.code === 'KeyF') {
               event.preventDefault();
-              formatDocument(view, isAsm);
+              formatDocument(view, isAsm, mnemonics);
             }
           }
         }),

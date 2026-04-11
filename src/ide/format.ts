@@ -4,7 +4,7 @@ import { EditorView } from "@codemirror/view";
 import { formatAsmLine } from "../common/format-asm";
 import { tabStopsFacet } from "./settings";
 
-export function formatDocument(view: EditorView, isAsm: boolean) {
+export function formatDocument(view: EditorView, isAsm: boolean, mnemonics?: Set<string>) {
     let state = view.state;
     const changeSets: ChangeSet[] = [];
 
@@ -72,7 +72,7 @@ export function formatDocument(view: EditorView, isAsm: boolean) {
             for (let i = 1; i <= state.doc.lines; i++) {
                 if (!isTargetLine(i)) continue;
                 const line = state.doc.line(i);
-                const formatted = formatAsmLine(line.text, i, indent, tabSize, stops);
+                const formatted = formatAsmLine(line.text, i, indent, tabSize, stops, mnemonics);
                 if (formatted !== line.text) {
                     specs.push({ from: line.from, to: line.to, insert: formatted });
                 }
