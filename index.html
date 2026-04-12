@@ -563,7 +563,9 @@ body {
 <script>
 // submenus open on click + hover
 $( ".dropdown-submenu" ).click(function(event) {
-    event.stopPropagation();
+    if (!$(event.target).hasClass('dropdown-item')) {
+      event.stopPropagation();
+    }
     $(this).parent().siblings().removeClass('open');
     $(this).parent().toggleClass('open');
 });
