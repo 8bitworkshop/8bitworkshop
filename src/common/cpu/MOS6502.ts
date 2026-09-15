@@ -5,7 +5,21 @@ import { hex } from "../util";
 
 // Copyright 2015 by Paulo Augusto Peccin. See license.txt distributed with this file.
 
-export var _MOS6502 = function() {
+// Passed to a variant's patch function (see MOS65C02.ts) so it can override specific
+// opcode-table slots in place -- these are the live arrays/builders, not copies.
+export interface MOS6502PatchContext {
+    opcodes: string[];
+    instructions: (() => void)[][];
+    cycletime: number[];
+    extracycles: number[];
+    insnlengths: number[];
+    validinsns: number[];
+    rX: number;
+    rY: number;
+    [name: string]: any; // addressing-mode and operation builder functions
+}
+
+export var _MOS6502 = function(patchFn?: (ctx: MOS6502PatchContext) => void) {
     var self = this;
 
     this.powerOn = function() {
@@ -538,6 +552,42 @@ export var _MOS6502 = function() {
     };
 
 
+    // 65C02 "(zp)" addressing -- like indirectYRead/Write but with no index added,
+    // so there's no page-cross penalty cycle.
+    var zeroPageIndirectRead = function(operation) {
+        return [
+            fetchOpcodeAndDecodeInstruction,
+            fetchIAL,                           // IAH will be zero
+            fetchBALFromIA,
+            function() {
+                add1toIAL();
+                fetchBAHFromIA();
+            },
+            fetchDataFromBA,
+            function() {
+                operation();
+                fetchNextOpcode();
+            }
+        ];
+    };
+
+    var zeroPageIndirectWrite = function(operation) {
+        return [
+            fetchOpcodeAndDecodeInstruction,
+            fetchIAL,                           // IAH will be zero
+            fetchBALFromIA,
+            function() {
+                add1toIAL();
+                fetchBAHFromIA();
+            },
+            function() {
+                operation();
+                writeDataToBA();
+            },
+            fetchNextOpcode
+        ];
+    };
+
     var zeroPageReadModifyWrite = function(operation) {
         return [
             fetchOpcodeAndDecodeInstruction,
@@ -1025,6 +1075,23 @@ export var _MOS6502 = function() {
         });
     }
 
+    // 65C02 INC A / DEC A (accumulator increment/decrement, opcodes 0x1A/0x3A)
+    function INC_ACC() {
+        return implied(function() {
+            A = (A + 1) & 255;
+            setZ(A);
+            setN(A);
+        });
+    }
+
+    function DEC_ACC() {
+        return implied(function() {
+            A = (A - 1) & 255;
+            setZ(A);
+            setN(A);
+        });
+    }
+
     function SEC() {
         return implied(function() {
             C = 1;
@@ -1149,6 +1216,13 @@ export var _MOS6502 = function() {
             setZ(A & par);
             setV(par & 0x40);
             setN(par);
+        });
+    }
+
+    // 65C02 BIT immediate (opcode 0x89) only affects Z, unlike memory BIT which also sets N/V
+    function BIT_IMM(addressing) {
+        return addressing(function() {
+            setZ(A & data);
         });
     }
 
@@ -1361,6 +1435,13 @@ export var _MOS6502 = function() {
         });
     }
 
+    // 65C02 STZ (store zero)
+    function STZ(addressing) {
+        return addressing(function() {
+            data = 0;
+        });
+    }
+
     function uSAX(addressing) {
         return addressing(function() {
             // Some sources say it would affect N and Z flags, some say it wouldn't. Chose not to affect
@@ -1431,6 +1512,21 @@ export var _MOS6502 = function() {
             data = par;
             setZ(par);
             setN(par);
+        });
+    }
+
+    // 65C02 TSB (Test and Set Bits) / TRB (Test and Reset Bits)
+    function TSB(addressing) {
+        return addressing(function() {
+            setZ(A & data);
+            data = data | A;
+        });
+    }
+
+    function TRB(addressing) {
+        return addressing(function() {
+            setZ(A & data);
+            data = data & (~A & 0xff);
         });
     }
 
@@ -1623,6 +1719,53 @@ export var _MOS6502 = function() {
         ];
     }
 
+    // 65C02 PHX / PHY / PLX / PLY
+    function PHX() {
+        return [
+            fetchOpcodeAndDecodeInstruction,
+            fetchOpcodeAndDiscard,
+            function() { pushToStack(X); },
+            fetchNextOpcode
+        ];
+    }
+
+    function PHY() {
+        return [
+            fetchOpcodeAndDecodeInstruction,
+            fetchOpcodeAndDiscard,
+            function() { pushToStack(Y); },
+            fetchNextOpcode
+        ];
+    }
+
+    function PLX() {
+        return [
+            fetchOpcodeAndDecodeInstruction,
+            fetchOpcodeAndDiscard,
+            peekFromStack,
+            function() {
+                X = popFromStack();
+                setZ(X);
+                setN(X);
+            },
+            fetchNextOpcode
+        ];
+    }
+
+    function PLY() {
+        return [
+            fetchOpcodeAndDecodeInstruction,
+            fetchOpcodeAndDiscard,
+            peekFromStack,
+            function() {
+                Y = popFromStack();
+                setZ(Y);
+                setN(Y);
+            },
+            fetchNextOpcode
+        ];
+    }
+
     function JSR() {
         return [
             fetchOpcodeAndDecodeInstruction,
@@ -1727,6 +1870,61 @@ export var _MOS6502 = function() {
                 fetchBAHFromIA();
             },
             function() { PC = BA; fetchNextOpcode(); }
+        ];
+    }
+
+    // 65C02 fixes the NMOS "JMP ($xxFF)" page-wrap bug: the pointer's high byte
+    // is now fetched from a properly carried address, at the cost of one extra cycle.
+    function JMP_IND_CMOS() {
+        return [
+            fetchOpcodeAndDecodeInstruction,
+            fetchIAL,
+            fetchIAH,
+            fetchOpcodeAndDiscard,
+            fetchBALFromIA,
+            function() {
+                IA = (IA + 1) & 0xffff;
+                fetchBAHFromIA();
+            },
+            function() { PC = BA; fetchNextOpcode(); }
+        ];
+    }
+
+    // 65C02 JMP ($xxxx,X) (opcode 0x7C)
+    function JMP_ABS_X() {
+        return [
+            fetchOpcodeAndDecodeInstruction,
+            fetchIAL,
+            fetchIAH,
+            fetchOpcodeAndDiscard,
+            function() { IA = (IA + X) & 0xffff; },
+            fetchBALFromIA,
+            function() {
+                IA = (IA + 1) & 0xffff;
+                fetchBAHFromIA();
+            },
+            function() { PC = BA; fetchNextOpcode(); }
+        ];
+    }
+
+    // 65C02 BRA (unconditional branch, opcode 0x80)
+    function BRA() {
+        return [
+            fetchOpcodeAndDecodeInstruction,
+            fetchBranchOffset,
+            function() {
+                fetchOpcodeAndDiscard();
+                addBranchOffsetToPCL();
+            },
+            function() {
+                if (branchOffsetCrossAdjust) {
+                    fetchOpcodeAndDiscard();
+                    adjustPCHForBranchOffsetCross();
+                } else {
+                    fetchNextOpcode();
+                }
+            },
+            fetchNextOpcode
         ];
     }
 
@@ -1877,6 +2075,35 @@ export var _MOS6502 = function() {
       2, 2, 0, 0, 0, 2, 2, 0, 1, 3, 0, 0, 0, 3, 3, 0
     ];
 
+    // Variant hook  -------------------------------------------
+    // Lets a subclass (e.g. 65C02) override specific opcode-table slots in place,
+    // without duplicating these tables. See MOS65C02.ts.
+    if (patchFn) {
+        patchFn({
+            opcodes: opcodes, instructions: instructions,
+            cycletime: cycletime, extracycles: extracycles,
+            insnlengths: insnlengths, validinsns: validinsns,
+            rX: rX, rY: rY,
+            implied: implied, immediateRead: immediateRead,
+            zeroPageRead: zeroPageRead, absoluteRead: absoluteRead,
+            zeroPageIndexedRead: zeroPageIndexedRead, absoluteIndexedRead: absoluteIndexedRead,
+            indirectXRead: indirectXRead, indirectYRead: indirectYRead, zeroPageIndirectRead: zeroPageIndirectRead,
+            zeroPageWrite: zeroPageWrite, absoluteWrite: absoluteWrite,
+            zeroPageIndexedWrite: zeroPageIndexedWrite, absoluteIndexedWrite: absoluteIndexedWrite,
+            zeroPageIndirectWrite: zeroPageIndirectWrite,
+            zeroPageReadModifyWrite: zeroPageReadModifyWrite, absoluteReadModifyWrite: absoluteReadModifyWrite,
+            zeroPageIndexedReadModifyWrite: zeroPageIndexedReadModifyWrite,
+            absoluteIndexedReadModifyWrite: absoluteIndexedReadModifyWrite,
+            ORA: ORA, AND: AND, EOR: EOR, ADC: ADC, SBC: SBC, CMP: CMP,
+            LDA: LDA, STA: STA, BIT: BIT, ASL: ASL, LSR: LSR, ROL: ROL, ROR: ROR, INC: INC, DEC: DEC,
+            STZ: STZ, TSB: TSB, TRB: TRB,
+            PHX: PHX, PHY: PHY, PLX: PLX, PLY: PLY,
+            BRA: BRA, INC_ACC: INC_ACC, DEC_ACC: DEC_ACC, BIT_IMM: BIT_IMM,
+            JMP_IND_CMOS: JMP_IND_CMOS, JMP_ABS_X: JMP_ABS_X,
+            NOP: NOP,
+        });
+    }
+
     this.getOpcodeMetadata = function(opcode, address) {
       // TODO: more intelligent maximum cycles
       //var i = instructions[opcode];
@@ -1941,9 +2168,15 @@ export enum MOS6502Interrupts { None=0, NMI=1, IRQ=2 };
 
 export class MOS6502 implements CPU, ClockBased, SavesState<MOS6502State>, Interruptable<MOS6502Interrupts> {
 
-  cpu = new _MOS6502();
+  cpu;
   interruptType : MOS6502Interrupts = MOS6502Interrupts.None;
-  
+
+  // A subclass (e.g. MOS65C02) can pass a patch function to override specific opcode-table
+  // slots; plain `new MOS6502()` keeps the default NMOS 6502 behavior unchanged.
+  constructor(patchFn?: (ctx: MOS6502PatchContext) => void) {
+    this.cpu = new _MOS6502(patchFn);
+  }
+
   connectMemoryBus(bus:Bus) {
     this.cpu.connectBus(bus);
   }
