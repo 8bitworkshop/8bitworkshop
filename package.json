@@ -77,7 +77,8 @@
     "fetch-vcr": {
       "node-fetch": "2.6.7"
     },
-    "serialize-javascript": "6.0.2"
+    "serialize-javascript": "6.0.2",
+    "basic-ftp": "5.3.1"
   },
   "scripts": {
     "build": "make prepare",
