@@ -6,8 +6,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { TOOL_META } from "../../src/common/toolmeta";
+import { TOOL_META, urustPlatformName } from "../../src/common/toolmeta";
 import { getToolForPlatform } from "../../src/common/toolselect";
+import { RUST_LANGUAGE } from './rustsyntax';
 
 /** Tools that build on the 8bitworkshop server ("remote:llvm-mos"). Off for now. */
 export const REMOTE_BUILDS = false;
@@ -25,8 +26,9 @@ export function isSourceFile(fn: string): boolean {
   return sourceExtensions.has(path.extname(fn).toLowerCase());
 }
 
-// extensions many other tools and extensions use too
-const SHARED_EXTENSIONS = new Set(['.c', '.h', '.s', '.asm', '.a', '.inc', '.bas', '.v', '.cpp', '.cc', '.i']);
+// extensions many other tools and extensions use too. .rs belongs to the
+// installed Rust extension (rust-analyzer), never to ours.
+const SHARED_EXTENSIONS = new Set(['.c', '.h', '.s', '.asm', '.a', '.inc', '.bas', '.v', '.cpp', '.cc', '.i', '.rs']);
 
 /** True for extensions only 8bitworkshop's tools use (.dasm, .ca65, ...). */
 export function isOwnExtension(fn: string): boolean {
@@ -53,9 +55,23 @@ export function verilogLanguageFor(fn: string, platform: string): string | undef
   return TOOL_META[getToolForPlatform(platform, fn)]?.editorStyle === 'verilog' ? '8bws-verilog' : undefined;
 }
 
+/**
+ * The fallback 8bws-rust language for a .rs file on a urust platform. It is
+ * assigned only when the document opened as plaintext -- that is, when no
+ * installed Rust extension claimed .rs; with rust-analyzer, VS Code's own
+ * `rust` language and grammar stay in charge.
+ */
+export function rustLanguageFor(fn: string, platform: string): string | undefined {
+  if (path.extname(fn).toLowerCase() !== '.rs') return undefined;
+  // .rs selects urust on every 6502/Z80 platform, but urust only has
+  // targets for some of them (see URUST_PLATFORM_NAMES)
+  if (!urustPlatformName(platform)) return undefined;
+  return TOOL_META[getToolForPlatform(platform, fn.toLowerCase())]?.editorStyle === 'rust' ? RUST_LANGUAGE.id : undefined;
+}
+
 /** The language to assign a shared-extension file in a project on `platform`, if any. */
 export function languageFor(fn: string, platform: string): string | undefined {
-  return asmLanguageFor(fn, platform) ?? verilogLanguageFor(fn, platform);
+  return asmLanguageFor(fn, platform) ?? verilogLanguageFor(fn, platform) ?? rustLanguageFor(fn, platform);
 }
 
 /** Headers and include files: never a main file. */

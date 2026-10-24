@@ -40,6 +40,7 @@ Strongest first:
 | The 8bitworkshop link in `README.md` | `8bitworkshop.com/...?platform=vcs&file=game.dasm` |
 | A ROM file | `game.nes`, `game.a26`, `game.gb` |
 | A platform's header or include file | `#include "neslib.h"`, `include "nesdefs.dasm"` |
+| An `rs8::` module in a Rust program | `use rs8::nes::*;` (urust) |
 | Hardware registers | `WSYNC`, `COLUBK` (VCS); `PPUCTRL` (NES); `$D020` (C64) |
 | A cc65 target in a Makefile, or a cc65 linker config | `cl65 -t c64`, `nes.cfg` |
 | A file extension few platforms use | `.cc2600`, `.bb` |

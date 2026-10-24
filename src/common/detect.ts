@@ -94,6 +94,14 @@ const FINGERPRINTS: { re: RegExp, platforms: string[], reason: string }[] = [
   { re: /\b(SDLSTL|COLPF[0-4]|DLISTL|ANTIC\.)\b|\$[dD]40[aA]\b/, platforms: ['atari8-800', 'atari8-5200'], reason: 'uses Atari 8-bit ANTIC/GTIA registers' },
   { re: /\bdisplay_off\(\)|\bSHOW_BKG\b|\bset_bkg_data\b/, platforms: ['gb'], reason: 'calls GBDK functions' },
   { re: /\bWait_Recal\b|\bIntensity_[0-9a-z]+\b/, platforms: ['vectrex'], reason: 'calls Vectrex BIOS routines' },
+  // urust programs name one of rs8's per-platform register modules
+  { re: /\brs8::nes\b/, platforms: ['nes'], reason: 'uses the rs8 NES library' },
+  { re: /\brs8::vcs\b/, platforms: ['vcs'], reason: 'uses the rs8 Atari 2600 library' },
+  { re: /\brs8::c64\b/, platforms: ['c64'], reason: 'uses the rs8 C64 library' },
+  { re: /\brs8::atari8\b/, platforms: ['atari8-800', 'atari8-5200'], reason: 'uses the rs8 Atari 8-bit library' },
+  { re: /\brs8::apple2\b/, platforms: ['apple2'], reason: 'uses the rs8 Apple II library' },
+  { re: /\brs8::vic20\b/, platforms: ['vic20'], reason: 'uses the rs8 VIC-20 library' },
+  { re: /\brs8::zx\b/, platforms: ['zx'], reason: 'uses the rs8 ZX Spectrum library' },
 ];
 
 const HEADER_EXTS = ['.h', '.inc', '.i'];

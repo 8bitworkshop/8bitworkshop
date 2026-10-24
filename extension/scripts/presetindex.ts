@@ -54,6 +54,7 @@ function language(tool: string): string {
   if (/c\+\+/.test(style)) return 'C++';
   if (/basic/i.test(style) || /basic/i.test(tool)) return 'BASIC';
   if (/verilog/.test(style)) return 'Verilog';
+  if (/rust/.test(style)) return 'Rust';
   if (meta && meta.kind === 'assembler') return 'assembly';
   return meta ? meta.name : tool;
 }

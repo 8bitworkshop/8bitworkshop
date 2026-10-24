@@ -45,6 +45,12 @@ describe('urust tool', function () {
     assert.deepStrictEqual(deps, ['nes.rs', 'io.rs']);
   });
 
+  it('links every platform module urust bundles', function () {
+    const src = 'use rs8::apple2::*;\nuse rs8::vic20::*;\nuse rs8::zx::*;\n';
+    assert.deepStrictEqual(matchDependencyPatterns(src, getIncludePatterns('urust')),
+      ['apple2.rs', 'vic20.rs', 'zx.rs']);
+  });
+
   it('exposes the rs8 sources as a WASI filesystem for the editor', function () {
     assert.strictEqual(getSharedFileSystemName('urust', 'devel-6502'), 'wasi:urust-fs.zip');
     assert.deepStrictEqual(getIncludeDirs('urust', 'devel-6502'), ['/rs8']);
@@ -56,7 +62,7 @@ describe('urust tool', function () {
     if (!fs.existsSync(zipfile)) return this.skip();
     // /rs8/<module>.rs has to resolve for every module the include pattern links
     const zip = await JSZip.loadAsync(fs.readFileSync(zipfile));
-    for (const f of ['lib.rs', 'atari8.rs', 'c64.rs', 'conio.rs', 'io.rs', 'nes.rs', 'rand.rs', 'vcs.rs']) {
+    for (const f of ['lib.rs', 'apple2.rs', 'atari8.rs', 'c64.rs', 'conio.rs', 'io.rs', 'nes.rs', 'rand.rs', 'vcs.rs', 'vic20.rs', 'zx.rs']) {
       assert.ok(zip.file('rs8/' + f), 'missing rs8/' + f);
     }
   });
@@ -68,6 +74,9 @@ describe('urust tool', function () {
     assert.strictEqual(urustPlatformName('atari8-800xl'), 'atari8');
     assert.strictEqual(urustPlatformName('vcs'), 'vcs');
     assert.strictEqual(urustPlatformName('apple2'), 'apple2');
+    assert.strictEqual(urustPlatformName('vic20'), 'vic20');
+    // the Z80 backend names the whole computer, not the CPU
+    assert.strictEqual(urustPlatformName('zx'), 'zx-spectrum');
   });
 
   it('parses JSON diagnostics; end column only on a single line', function () {

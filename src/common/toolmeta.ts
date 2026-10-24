@@ -267,7 +267,7 @@ export const DIALOG_INCLUDE_PATTERNS: RegExp[] = [
 // separate link step is involved.
 const URUST_MOD_PATTERN = /^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/gm;
 // the modules in crates/rs8/src (and the io shim) that urust bundles
-const URUST_RS8_MODULE_PATTERN = /\brs8::(atari8|c64|conio|io|nes|rand|vcs)\b/g;
+const URUST_RS8_MODULE_PATTERN = /\brs8::(apple2|atari8|c64|conio|io|nes|rand|vcs|vic20|zx)\b/g;
 export const URUST_INCLUDE_PATTERNS: (RegExp | ToolIncludePattern)[] = [
   /\binclude_(?:bytes|str)!\s*\(\s*"(.+?)"\s*\)/g,
   ...SHARED_RESOURCE_PATTERNS,
@@ -776,7 +776,8 @@ export const TOOL_META: { [id: string]: ToolMeta } = {
   },
 
   // Rust subset for 8-bit CPUs (github.com/sehugg/urust); one WASI binary
-  // builds for devel-6502, nes, c64, atari8 and vcs
+  // builds for devel-6502, nes, c64, atari8, vcs, apple2, vic20 and
+  // zx-spectrum (see URUST_PLATFORM_NAMES below)
   urust: {
     id: 'urust', name: 'urust', kind: 'compiler', arch: '6502',
     extensions: ['.rs'],
@@ -954,6 +955,29 @@ export function getPreloadFSName(tool: string, platform?: string): string | unde
 export function getSkeletonName(tool: string): string {
   let meta = getToolMeta(tool);
   return (meta && meta.skeleton) ? meta.skeleton : tool.replace(/^remote:/, '');
+}
+
+/**
+ * urust's `--platform` names, keyed by the 8bitworkshop platform root (the id
+ * without a `.emulator` suffix or a `-specialization`). A root that isn't here
+ * has no urust target, even though .rs selects urust on every 6502/Z80
+ * platform (see toolselect.ts).
+ */
+export const URUST_PLATFORM_NAMES: { [root: string]: string } = {
+  'bare': 'bare',
+  'devel': 'devel-6502',
+  'nes': 'nes',
+  'c64': 'c64',
+  'atari8': 'atari8',
+  'vcs': 'vcs',
+  'apple2': 'apple2',
+  'vic20': 'vic20',
+  'zx': 'zx-spectrum',
+};
+
+/** urust's `--platform` name for an 8bitworkshop platform id, if it has one. */
+export function urustPlatformName(platform: string): string | undefined {
+  return URUST_PLATFORM_NAMES[platform.split(/[.-]/)[0]];
 }
 
 /**

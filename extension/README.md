@@ -25,6 +25,7 @@ Programming languages include:
 - **Assembler** with DASM, ca65, zmac, and more
 - **C** with CC65, SDCC, and more
 - **BASIC** with batariBASIC and FastBASIC
+- **Rust** with urust (a subset of Rust, for 6502 and Z80 platforms)
 - **Verilog** for hardware design and simulation
 - ...and more! There's a lot going on in here!
 
@@ -52,6 +53,12 @@ You don't need Microsoft's C/C++ extension: this extension builds your C code
 and reports its errors. VS Code suggests C/C++ whenever you open a `.c` file,
 so new projects include a `.vscode/extensions.json` that turns the suggestion
 off for that folder.
+
+Rust projects keep your Rust extension: `.rs` files stay in rust-analyzer's
+hands for highlighting and navigation, and 8bitworkshop builds them with
+urust. New urust projects turn off rust-analyzer's `cargo check`, unresolved-name diagnostics, rs8
+macro expansion and Run/Debug lenses, none of which have a target to work
+with; see [Building](docs/building.md#rust-urust).
 
 ## Settings
 

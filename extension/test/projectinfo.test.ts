@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as path from 'path';
-import { FolderInfo, Project, asmLanguageFor, languageFor, isOwnExtension, projectFor, resolveRunTarget, withoutProject } from '../src/projectinfo';
+import { FolderInfo, Project, asmLanguageFor, languageFor, isOwnExtension, projectFor, resolveRunTarget, withoutProject, rustLanguageFor } from '../src/projectinfo';
 import { BuildReason, BuildScheduler, Clock } from '../src/autobuild';
 
 const WS = path.resolve('/work/game');
@@ -80,6 +80,8 @@ describe('projectFor', function () {
     assert.ok(!isOwnExtension('game.c'));
     assert.ok(!isOwnExtension('game.s'));
     assert.ok(!isOwnExtension('notes.txt'));
+    // .rs belongs to the installed Rust extension, not to us
+    assert.ok(!isOwnExtension('main.rs'));
   });
 });
 
@@ -238,5 +240,15 @@ describe('languageFor', function () {
     assert.equal(languageFor('TOP.V', 'verilog'), '8bws-verilog');
     assert.equal(languageFor('top.v', 'nes'), undefined);
     assert.equal(languageFor('main.s', 'nes'), '8bws-6502');
+  });
+
+  it('offers the Rust fallback only on urust platforms', function () {
+    for (var platform of ['nes', 'vcs', 'c64', 'atari8-800', 'apple2', 'vic20', 'zx', 'devel-6502'])
+      assert.equal(rustLanguageFor('main.rs', platform), '8bws-rust', platform);
+    assert.equal(languageFor('game.rs', 'nes'), '8bws-rust');
+    assert.equal(languageFor('GAME.RS', 'c64'), '8bws-rust');
+    assert.equal(rustLanguageFor('main.rs', 'gb'), undefined);
+    assert.equal(rustLanguageFor('main.rs', 'verilog'), undefined);
+    assert.equal(rustLanguageFor('main.c', 'nes'), undefined);
   });
 });

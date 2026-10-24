@@ -27,6 +27,7 @@ import { assetServers, AssetStore } from '../../src/tools/assets';
 import { projectReadme, writeLauncher } from './terminalcli';
 import type { PlatformInfo } from '../../src/tools/presettypes';
 import { registerTools } from './lmtools';
+import { RUST_ANALYZER_SETTINGS, hasRustAnalyzerSettings, isUrustProject, sameSetting, withRustAnalyzerSettings } from './rustanalyzer';
 import { AssetManifest, packsForPlatform } from '../../src/tools/assetpacks';
 import { ErrorTelemetry } from './telemetry';
 
@@ -129,6 +130,7 @@ export function activate(ctx: vscode.ExtensionContext) {
   command('openExample', () => openExample());
   command('copyToWorkspace', (uri?: vscode.Uri) => copyToWorkspace(uri));
   command('detectProjects', () => detectProjects(true));
+  command('setupRustAnalyzer', () => setupRustAnalyzer());
   command('addLaunchConfiguration', () => addLaunchConfiguration());
   command('projectMenu', () => projectMenu());
   command('reset', () => emu?.started && emu.notify('reset'));
@@ -452,11 +454,14 @@ async function runScriptHeadless(target: Target, build: BuildOutcome, script: st
 
 ////// languages
 
-const OWN_LANGUAGES = [...ASM_LANGUAGE_CPUS.map(cpu => '8bws-' + cpu), '8bws-verilog'];
+const OWN_LANGUAGES = [...ASM_LANGUAGE_CPUS.map(cpu => '8bws-' + cpu), '8bws-verilog', '8bws-rust'];
 
 /**
- * Give a .s/.asm/.inc/.a/.v file its project's language. Files no
- * other extension claimed open as plaintext; we leave the rest alone.
+ * Give a shared-extension file its project's language. Files no other
+ * extension claimed open as plaintext; we leave the rest alone. That is
+ * deliberate for .rs: when rust-analyzer (or any Rust extension) is
+ * installed VS Code opens it as `rust`, which is not ours, so the 8bws-rust
+ * fallback is only ever assigned when nothing else claims Rust.
  */
 function assignLanguage(doc: vscode.TextDocument) {
   if (doc.languageId !== 'plaintext' && !OWN_LANGUAGES.includes(doc.languageId)) return;
@@ -559,6 +564,8 @@ async function projectMenu() {
     if (project.mainFile && target.main.fsPath !== project.mainFile)
       items.push({ label: '$(debug-alt) Add Launch Configuration', description: `for ${describeTarget(target)}`, run: () => addLaunchConfiguration() });
     items.push({ label: '$(search) Detect Again', run: () => detectAgain(project) });
+    if (isUrustProject(project.platform, project.tool))
+      items.push({ label: '$(settings-gear) Set Up rust-analyzer', description: 'no cargo check or Run lenses', run: () => setupRustAnalyzer() });
     items.push({ label: '$(trash) Remove Project...', run: () => removeProject() });
   }
   var picked = await vscode.window.showQuickPick(items, { title: '8bitworkshop' });
@@ -1054,13 +1061,16 @@ async function setMainFile(uri?: vscode.Uri): Promise<boolean> {
     if (picked.id === 'main') await scope.updateProject(project, { mainFile: file });
     else if (picked.id === 'dir') await scope.updateProject(project, { mainFile: null });
     else await scope.saveProject(dir, { platform: project.platform, mainFile: file });
-    await scope.setTargetChoice(scope.projectFor(uri) || project, undefined);
+    var next = scope.projectFor(uri) || project;
+    if (isUrustProject(next.platform, next.tool)) await writeRustAnalyzerSettings(next.scope);
+    await scope.setTargetChoice(next, undefined);
     return true;
   }
   var choice = await chooseForFile(templates, uri);
   if (!choice) return false;
   var dir = path.dirname(file);
   var saved = await scope.saveProject(dir, { platform: choice.platform, mainFile: file, tool: choice.tool });
+  if (saved && isUrustProject(choice.platform, choice.tool)) await writeRustAnalyzerSettings(dir);
   if (!saved) {
     // no folder to save to: keep it for this window, and offer the folder
     scope.addWindowProject({ scope: dir, root: dir, platform: choice.platform, mainFile: file, tool: choice.tool, origin: 'window' });
@@ -1075,22 +1085,96 @@ async function setMainFile(uri?: vscode.Uri): Promise<boolean> {
   return true;
 }
 
+/** .vscode/settings.json in `dir`: its contents, {} if there is none, or
+ *  undefined if the file exists and can't be parsed (it has comments). */
+async function readFolderSettings(dir: vscode.Uri): Promise<{ [key: string]: any } | undefined> {
+  var file = vscode.Uri.joinPath(dir, '.vscode', 'settings.json');
+  try {
+    return JSON.parse(new TextDecoder().decode(await vscode.workspace.fs.readFile(file)));
+  } catch (e) {
+    // no settings yet, or comments we can't parse: start fresh only if missing
+    try { await vscode.workspace.fs.stat(file); return undefined; } catch (e2) { return {}; }
+  }
+}
+
+async function writeFolderSettingsFile(dir: vscode.Uri, json: { [key: string]: any }) {
+  await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(dir, '.vscode'));
+  await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(dir, '.vscode', 'settings.json'),
+    new TextEncoder().encode(JSON.stringify(json, null, 2) + '\n'));
+}
+
+/**
+ * Turn off rust-analyzer's cargo check, proc-macro expansion and Run/Debug
+ * lenses for a urust project in `dir`. An open workspace folder is written
+ * through VS Code's configuration API, so a settings.json with comments
+ * survives and the change applies at once; a folder that isn't open gets a
+ * merged .vscode/settings.json instead.
+ */
+async function writeRustAnalyzerSettings(dir: string): Promise<boolean> {
+  var folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(dir));
+  if (folder) {
+    var cfg = vscode.workspace.getConfiguration('rust-analyzer', folder.uri);
+    var target = (vscode.workspace.workspaceFolders || []).length > 1
+      ? vscode.ConfigurationTarget.WorkspaceFolder : vscode.ConfigurationTarget.Workspace;
+    for (var key in RUST_ANALYZER_SETTINGS) {
+      var name = key.replace(/^rust-analyzer\./, '');
+      var i = cfg.inspect(name);
+      var current = target === vscode.ConfigurationTarget.WorkspaceFolder ? i?.workspaceFolderValue : i?.workspaceValue;
+      if (!sameSetting(current, RUST_ANALYZER_SETTINGS[key])) await cfg.update(name, RUST_ANALYZER_SETTINGS[key], target);
+    }
+    return true;
+  }
+  var uri = vscode.Uri.file(dir);
+  var json = await readFolderSettings(uri);
+  if (!json) return false;
+  if (hasRustAnalyzerSettings(json)) return true;
+  await writeFolderSettingsFile(uri, withRustAnalyzerSettings(json));
+  return true;
+}
+
 /** Write .vscode/settings.json in a folder that isn't open yet. */
 async function writeFolderSettings(dir: vscode.Uri, s: { platform: string, mainFile?: string, tool?: string }) {
-  var file = vscode.Uri.joinPath(dir, '.vscode', 'settings.json');
-  var json: any = {};
-  try {
-    json = JSON.parse(new TextDecoder().decode(await vscode.workspace.fs.readFile(file)));
-  } catch (e) {
-    // no settings yet (or comments we can't parse: start fresh only if missing)
-    try { await vscode.workspace.fs.stat(file); return; } catch (e2) { }
-  }
+  var json = await readFolderSettings(dir);
+  if (!json) return;
   json[CONFIG + '.platform'] = s.platform;
   if (s.mainFile) json[CONFIG + '.mainFile'] = s.mainFile;
   if (s.tool) json[CONFIG + '.tool'] = s.tool;
-  await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(dir, '.vscode'));
-  await vscode.workspace.fs.writeFile(file, new TextEncoder().encode(JSON.stringify(json, null, 2) + '\n'));
+  // urust has no Cargo target, so rust-analyzer's check only reports errors
+  if (isUrustProject(s.platform, s.tool)) Object.assign(json, RUST_ANALYZER_SETTINGS);
+  await writeFolderSettingsFile(dir, json);
   await writeExtensionRecommendations(dir);
+}
+
+/**
+ * Command: write the rust-analyzer settings for the current urust project,
+ * or (with a confirmation) for the folder of the Rust file in the editor.
+ * rust-analyzer keeps parsing, highlighting, hover and navigation; it stops
+ * running cargo check, expanding the rs8 macros and offering Run/Debug.
+ */
+async function setupRustAnalyzer() {
+  var project = currentTarget()?.project || scope.projectFor(activeUri());
+  var inProject = !!project && isUrustProject(project.platform, project.tool);
+  var uri = activeUri();
+  var dir = inProject ? project!.scope
+    : uri && uri.scheme === 'file' && /\.rs$/i.test(uri.fsPath) ? path.dirname(uri.fsPath) : undefined;
+  if (!dir) {
+    vscode.window.showInformationMessage('8bitworkshop: open a Rust file or set a urust project as the main file first.');
+    return;
+  }
+  if (!inProject) {
+    // a plain Rust folder may hold crates of its own, so ask once
+    var answer = await vscode.window.showWarningMessage(
+      "Turn off rust-analyzer's cargo check, unresolved-name diagnostics, rs8 macro expansion and Run/Debug lenses for this workspace folder? " +
+      'Every Rust project in the workspace folder is affected.', { modal: true }, 'Turn Off');
+    if (answer !== 'Turn Off') return;
+  }
+  if (!await writeRustAnalyzerSettings(dir)) {
+    vscode.window.showWarningMessage(`8bitworkshop: could not update the rust-analyzer settings for ${dir}.`);
+    return;
+  }
+  vscode.window.showInformationMessage(
+    '8bitworkshop: rust-analyzer will parse Rust without running cargo, expanding the rs8 macros, ' +
+    'or showing urust errors in this workspace folder.');
 }
 
 /**
@@ -1219,6 +1303,7 @@ async function createFromTemplate(platformId: string, templateId: string, replac
   }
   var main = await templates.copy(platform, t, dest.dir, withLibraries);
   if (!main) return;
+  if (isUrustProject(platform.id, t.tool)) await writeRustAnalyzerSettings(dest.dir.fsPath);
   await writeReadme(dest.dir, platform, path.relative(dest.dir.fsPath, main.fsPath).split(path.sep).join('/'));
   var settings = { platform: platform.id, mainFile: main.fsPath };
   if (dest.open) {
@@ -1407,6 +1492,7 @@ async function acceptFinding(dir: string, d: Detection, platform = d.platform, p
   var file = prefer && d.mainCandidates?.includes(prefer) ? prefer : d.mainFile || d.mainCandidates?.[0];
   var mainFile = prefer && file === prefer ? file : d.mainFile;
   await scope.saveProject(dir, { platform, mainFile: mainFile ? path.join(dir, mainFile) : undefined, tool });
+  if (isUrustProject(platform, tool)) await writeRustAnalyzerSettings(dir);
   return file && path.join(dir, file);
 }
 

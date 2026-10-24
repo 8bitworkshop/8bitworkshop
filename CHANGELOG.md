@@ -2,11 +2,16 @@
 
 ## [Unreleased]
 
+### Visual Studio Code extension (preview)
+
+See [extension/CHANGELOG.md](extension/CHANGELOG.md).
+
 ### Builds and tools
 
 - The worker's CommonJS require shim kept the exports of a module it loaded in the shim module's own `exports` binding. In a mocha parallel worker that had loaded the unbundled Node modules first, the bundle reused that shim; loading one module then made `require('path')` throw, so the `inform6` test failed. The shim now keeps those exports on the worker global.
 - CI builds again: the `chips` submodule was registered with the relative URL `./chips`, which git resolves against the superproject's remote (`github.com/8bitworkshop/8bitworkshop/chips`, a 404), so every `git submodule update` failed while cloning it. It now points at `https://github.com/8bitworkshop/chips`, and a unit test rejects relative submodule URLs.
 - The WASM builds of the compilers no longer take the host down with them. Their Emscripten runtime aborts the process on an unhandled rejection and rethrows uncaught exceptions, which node turns into exit code 7 with no message. The `8bws` CLI and the VS Code extension ignore those handlers now, so a stray error is reported instead of killing the process.
+- Rust programs build with urust on every platform it supports. The ZX Spectrum now maps to urust's `zx-spectrum` target instead of an unknown `zx`, and `rs8::apple2`, `rs8::vic20` and `rs8::zx` link to their module sources like the other register modules. Platform detection recognizes an `rs8::` module in a `.rs` file, so an existing urust program opens without `--platform`.
 
 ### Emulators
 

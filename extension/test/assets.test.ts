@@ -9,7 +9,7 @@ import * as zlib from 'zlib';
 import { execFileSync } from 'child_process';
 import { AssetStore, assetServers, defaultCacheDir } from '../../src/tools/assets';
 import { EXCLUDED_PLATFORM_MODULES, UNSUPPORTED_PLATFORMS } from '../../src/tools/exclusions';
-import { needsSdcc4, AssetManifest, PackInfo, isUnreviewedFile, makePack, packForFile, packsForPlatform, readPack } from '../../src/tools/assetpacks';
+import { needsSdcc4, AssetManifest, PackInfo, isPackable, isUnreviewedFile, makePack, packForFile, packsForPlatform, readPack } from '../../src/tools/assetpacks';
 import { listPackFiles } from '../scripts/assetpack';
 import { findRootDir } from '../src/projectinfo';
 import { Rpc } from '../src/rpc';
@@ -39,6 +39,20 @@ describe('extension asset packs', function () {
     assert.deepEqual(packsForPlatform('verilog-vga'), ['base', 'verilog']);
     assert.deepEqual(packsForPlatform('nes'), ['base']);
     assert.deepEqual(packsForPlatform(undefined), ['base']);
+  });
+
+  it('puts the urust toolchain in the base pack', function () {
+    for (var f of ['src/worker/wasm/urust.wasm', 'src/worker/fs/urust-fs.zip']) {
+      assert.equal(packForFile(f), 'base', f);
+      assert.ok(isPackable(f), f); // urust is MIT: no UNREVIEWED_TOOLS entry
+    }
+    // packs are built from git-tracked files. Until the urust binaries are
+    // committed they exist only in the work tree, so there is nothing to pack.
+    var tracked = execFileSync('git', ['ls-files', '--', 'src/worker/wasm/urust.wasm', 'src/worker/fs/urust-fs.zip'],
+      { cwd: ROOT, encoding: 'utf-8' }).split('\n').filter(f => f);
+    if (tracked.length < 2) return this.skip();
+    var all = Object.values(listPackFiles(ROOT)).flat();
+    for (var f of ['src/worker/wasm/urust.wasm', 'src/worker/fs/urust-fs.zip']) assert.ok(all.includes(f), f);
   });
 
   it('puts the lesser-used toolchains in the extra pack, fetched by tool', function () {

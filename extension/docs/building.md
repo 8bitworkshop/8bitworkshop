@@ -25,6 +25,30 @@ For toolchain development, set `8bitworkshop.toolchainPath` to a built
 8bitworkshop checkout (a directory containing `src/worker`) to use it
 instead of the included toolchains.
 
+### Rust (urust)
+
+`.rs` files on a platform urust supports (NES, Atari 2600, C64, Atari
+8-bit, Apple II, VIC-20, ZX Spectrum, and devel-6502) build with
+[urust](https://github.com/sehugg/urust), a compiler for a subset of
+Rust. It has no Cargo target: `rs8` and the register modules are built
+in, and `#[reset]`/`#[nmi]` mark the entry points.
+
+8bitworkshop never claims `.rs`: if you have a Rust extension installed,
+VS Code keeps using its `rust` language, so rust-analyzer's parsing,
+highlighting, hover, formatting and navigation all work. Without one,
+8bitworkshop assigns its own `Rust (urust)` language for highlighting.
+
+rust-analyzer's `cargo check` has no target to check, so it reports
+errors for `#[reset]`, `reg!` and `rs8::*`, and its proc-macro server
+can't expand the rs8 macros: `#[asm]` and `#[no_cross]` make it exit
+with `proc macro server error ... exit status: 101`. New urust projects
+write settings that turn off the check, its unresolved-name
+diagnostics (syntax and type errors stay), proc-macro expansion and the
+Run/Debug lenses while leaving highlighting, hover and navigation on. For an existing project, run **8bitworkshop: Set Up
+rust-analyzer**; it writes those settings to the folder's settings (asking
+first for a `.rs` file outside a urust project) or to a closed project's
+`.vscode/settings.json`.
+
 ## Errors
 
 Errors appear as red underlines and in the **Problems** panel. The

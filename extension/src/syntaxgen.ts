@@ -7,6 +7,7 @@
 
 import * as K from '../../src/parser/asmkeywords';
 import { VERILOG_LANGUAGE } from './verilogsyntax';
+import { RUST_LANGUAGE } from './rustsyntax';
 
 export interface AsmLanguage {
   id: string;             // language ID, e.g. '8bws-6502'
@@ -279,6 +280,12 @@ export function makeContributions(dir = './out/syntaxes') {
       id: VERILOG_LANGUAGE.id,
       aliases: VERILOG_LANGUAGE.aliases,
       configuration: `${dir}/${VERILOG_LANGUAGE.id}.language-configuration.json`,
+    }, {
+      // no extensions: .rs belongs to the installed Rust extension; this is
+      // assigned per project only when no Rust extension claims it
+      id: RUST_LANGUAGE.id,
+      aliases: RUST_LANGUAGE.aliases,
+      configuration: `${dir}/${RUST_LANGUAGE.id}.language-configuration.json`,
     }],
     grammars: [...ASM_LANGUAGES.map((l) => ({
       language: l.id,
@@ -288,6 +295,10 @@ export function makeContributions(dir = './out/syntaxes') {
       language: VERILOG_LANGUAGE.id,
       scopeName: VERILOG_LANGUAGE.scopeName,
       path: `${dir}/${VERILOG_LANGUAGE.id}.tmLanguage.json`,
+    }, {
+      language: RUST_LANGUAGE.id,
+      scopeName: RUST_LANGUAGE.scopeName,
+      path: `${dir}/${RUST_LANGUAGE.id}.tmLanguage.json`,
     }],
   };
 }

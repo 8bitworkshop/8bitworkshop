@@ -160,6 +160,52 @@ describe('verilog grammar', function () {
   });
 });
 
+describe('rust grammar', function () {
+  let g: IGrammar;
+  before(async () => { g = await loadGrammar('rust'); });
+
+  it('reads the Rust subset urust compiles', function () {
+    assert.equal(scopeOf(g, '#[reset]', 'reset'), 'entity.other.attribute-name');
+    assert.equal(scopeOf(g, 'fn main() {', 'fn'), 'keyword.control');
+    assert.equal(scopeOf(g, 'fn main() {', 'main'), 'entity.name.function');
+    assert.equal(scopeOf(g, 'struct Player {', 'Player'), 'entity.name.type');
+    assert.equal(scopeOf(g, 'use rs8::nes::*;', 'rs8'), 'entity.name.namespace');
+    assert.equal(scopeOf(g, 'let x: u8 = 0x10;', 'let'), 'keyword.control');
+    assert.equal(scopeOf(g, 'let x: u8 = 0x10;', 'u8'), 'storage.type');
+    assert.equal(scopeOf(g, 'let x: u8 = 0x10;', '0x10'), 'constant.numeric.hex');
+    assert.equal(scopeOf(g, 'let b = 0b1010u8;', '0b1010u8'), 'constant.numeric.binary');
+    assert.equal(scopeOf(g, 'println!("Hi");', 'println!'), 'entity.name.function.macro');
+    assert.equal(scopeOf(g, 'println!("Hi");', 'Hi'), 'string.quoted.double');
+    assert.equal(scopeOf(g, "let c = 'a';", "'a'"), 'string.quoted.single');
+    assert.equal(scopeOf(g, 'fn f<\'a>(x: &\'a u8) {}', "'a"), 'variable.other.lifetime');
+    assert.equal(scopeOf(g, '  // note', '// note'), 'comment.line.double-slash');
+  });
+
+  it('reads nested attribute brackets, raw strings and ALL_CAPS names', function () {
+    assert.equal(scopeOf(g, '#[x(a = [1])] fn f() {}', 'fn'), 'keyword.control');
+    assert.equal(scopeOf(g, 'let s = r#"a "b" c"#;', 'a "b" c'), 'string.quoted.double.raw');
+    assert.equal(scopeOf(g, 'PPUCTRL = 0;', 'PPUCTRL'), 'constant.other');
+    assert.equal(scopeOf(g, 'struct Player {', 'Player'), 'entity.name.type');
+  });
+
+  it('reads block comments, nesting included', async function () {
+    const { INITIAL } = await import('vscode-textmate');
+    let st = INITIAL;
+    const line = (text: string): [string, string][] => {
+      const r = g.tokenizeLine(text, st);
+      st = r.ruleStack;
+      return r.tokens.map((t: any) => [text.slice(t.startIndex, t.endIndex), t.scopes[t.scopes.length - 1]]);
+    };
+    // every token on these lines is still inside the outer comment
+    for (const text of ['/* outer', '  /* inner */', '  still out'])
+      assert.ok(line(text).every(([t, s]) => !t.trim() || s === 'comment.block.rust'), text);
+    // the end marker closes it, and the code after it is code again
+    const after = line('*/ fn main() {}');
+    assert.equal(after.find(([t]) => t === '*/')?.[1], 'comment.block.rust');
+    assert.equal(after.find(([t]) => t === 'fn')?.[1], 'keyword.control.rust');
+  });
+});
+
 describe('assembler languages', function () {
   it('match package.json', function () {
     const pkg = JSON.parse(fs.readFileSync(path.join(EXT_ROOT, 'package.json'), 'utf8'));

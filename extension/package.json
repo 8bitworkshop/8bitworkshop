@@ -142,6 +142,11 @@
         "category": "8bitworkshop"
       },
       {
+        "command": "8bitworkshop.setupRustAnalyzer",
+        "title": "Set Up rust-analyzer",
+        "category": "8bitworkshop"
+      },
+      {
         "command": "8bitworkshop.removeProject",
         "title": "Remove Project...",
         "category": "8bitworkshop"
@@ -451,6 +456,13 @@
           "Verilog (8bitworkshop)"
         ],
         "configuration": "./out/syntaxes/8bws-verilog.language-configuration.json"
+      },
+      {
+        "id": "8bws-rust",
+        "aliases": [
+          "Rust (urust)"
+        ],
+        "configuration": "./out/syntaxes/8bws-rust.language-configuration.json"
       }
     ],
     "grammars": [
@@ -473,6 +485,11 @@
         "language": "8bws-verilog",
         "scopeName": "source.verilog.8bws",
         "path": "./out/syntaxes/8bws-verilog.tmLanguage.json"
+      },
+      {
+        "language": "8bws-rust",
+        "scopeName": "source.rust.8bws",
+        "path": "./out/syntaxes/8bws-rust.tmLanguage.json"
       }
     ],
     "menus": {

@@ -55,6 +55,18 @@ describe('detect', () => {
     assert.strictEqual(d[0].platform, 'atari8-5200');
   });
 
+  it('finds a urust platform from the rs8 module a program uses', async () => {
+    for (var [module, platform] of [['nes', 'nes'], ['vcs', 'vcs'], ['c64', 'c64'], ['apple2', 'apple2'], ['vic20', 'vic20'], ['zx', 'zx']]) {
+      var d = await detectProject(files({ 'main.rs': `use rs8::${module}::*;\nfn main() {}\n` }));
+      assert.strictEqual(d[0].platform, platform, module);
+      assert.ok(isClearWinner(d), module);
+      assert.strictEqual(d[0].mainFile, 'main.rs', module);
+    }
+    // the Atari 8-bit module serves both machines, so it can't pick one alone
+    var a8 = await detectProject(files({ 'main.rs': 'use rs8::atari8::*;\nfn main() {}\n' }));
+    assert.deepStrictEqual(a8.map(d => d.platform).sort(), ['atari8-5200', 'atari8-800']);
+  });
+
   it('prefers the folder name over a shared Atari library header', async () => {
     var map: { [fn: string]: string } = {
       'game.c': '#include <atari.h>\nvoid main() {}\n',

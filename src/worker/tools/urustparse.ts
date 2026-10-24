@@ -3,6 +3,9 @@
 // (src/worker/tools/urust.ts); kept free of worker imports so tests can use it.
 
 import { CodeListingMap, Segment, SourceLine, WorkerError } from "../../common/workertypes";
+import { urustPlatformName } from "../../common/toolmeta";
+
+export { urustPlatformName };
 
 /** One entry of urust's `--error-format json` array (1-based, end exclusive). */
 export interface UrustDiagnostic {
@@ -103,9 +106,3 @@ export function urustDebugToResult(dbg: UrustDebug, paths: string[]): UrustDebug
     return { listings, symbolmap, symbolsizes, segments, banked };
 }
 
-/** urust's `--platform` name for an 8bitworkshop platform id, if it has one. */
-export function urustPlatformName(platform: string): string | undefined {
-    const root = platform.split(/[.-]/)[0];
-    if (platform === 'devel-6502' || root === 'devel') return 'devel-6502';
-    return root;
-}
