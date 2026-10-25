@@ -1,0 +1,44 @@
+#!/bin/sh
+# _quiet -- shared quiet runner for the hooks in this directory.
+#
+# Sourced by pre-commit / pre-push. The caller sets:
+#   hook_action     verb for the failure message (commit, push, ...)
+#   hook_skip_hint  how to bypass the hook
+#
+# quiet_run <description> <command> [args...]
+#
+# Prints one line while the command runs and one when it finishes. Output is
+# captured to a log; only a failed run prints its tail and keeps the log.
+
+quiet_run() {
+    desc=$1
+    shift
+
+    name=${0##*/}
+    log="${TMPDIR:-/tmp}/8bitworkshop-${name}.log"
+    start=$(date +%s)
+
+    printf '%s: running %s ...' "$name" "$desc"
+    "$@" >"$log" 2>&1
+    status=$?
+
+    elapsed=$(( $(date +%s) - start ))
+    if [ "$elapsed" -ge 60 ]; then
+        elapsed_fmt="$(($elapsed / 60))m $(($elapsed % 60))s"
+    else
+        elapsed_fmt="${elapsed}s"
+    fi
+
+    if [ "$status" -eq 0 ]; then
+        printf ' ok (%s)\n' "$elapsed_fmt"
+        rm -f "$log"
+        exit 0
+    fi
+
+    printf ' FAILED (%s)\n\n' "$elapsed_fmt"
+    tail -n 200 "$log"
+    echo
+    echo "$name: $desc failed; ${hook_action:-command} aborted. Full output: $log"
+    echo "$name: bypass with ${hook_skip_hint:-the skip environment variable}."
+    exit "$status"
+}

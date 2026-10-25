@@ -22,6 +22,11 @@ watchgrammars:
 		sleep 1; \
 	done
 
+# Install the tracked git hooks (.githooks/), including the pre-push test run.
+# Set core.hooksPath repo-locally so it doesn't affect other checkouts.
+hooks:
+	git config core.hooksPath .githooks
+
 # git submodules init and update, based on submodule status prefix:
 #   '-' = uninitialized
 #   '+' = different commit
@@ -40,7 +45,7 @@ buildtsc: submodules
 	npm run doctools
 	npm run esbuild
 
-prepare: buildtsc
+prepare: buildtsc hooks
 	cp node_modules/jquery/dist/jquery.min.js ./jquery/
 	cp -r node_modules/bootstrap/dist/* ./bootstrap/
 	cp node_modules/bootstrap-tourist/*.css node_modules/bootstrap-tourist/*.js ./lib/

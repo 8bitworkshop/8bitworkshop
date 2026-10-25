@@ -8,6 +8,8 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 
 ### Builds and tools
 
+- Git hooks in `.githooks/` run the type check before a commit (`npm run tslint`) and the test suite before a push (`npm test`). They print one line while working and only show output on failure, which aborts the commit/push. `make prepare`/`npm run hooks` installs them by pointing `core.hooksPath` at `.githooks`; bypass with `--no-verify`, `SKIP_PRECOMMIT=1`, or `SKIP_PREPUSH=1`. Tag-only and branch-deletion pushes don't run the tests.
+
 - **CVBasic** builds BASIC programs for the Colecovision, MSX, SG-1000/SMS and NES. The WASI compiler turns `.bas` into gasm80 assembler, which the newly vendored gasm80 (also WASI) assembles into a cartridge ROM. Compiler and assembler diagnostics point at BASIC lines, and the gasm80 listing gives the debugger source line/address information. Colecovision, MSX, NES and SG-1000/SMS now send `.bas` to it, with presets, skeletons and a `cvbasic-fs.zip` package of its prologue/epilogue files.
 - The worker's CommonJS require shim kept the exports of a module it loaded in the shim module's own `exports` binding. In a mocha parallel worker that had loaded the unbundled Node modules first, the bundle reused that shim; loading one module then made `require('path')` throw, so the `inform6` test failed. The shim now keeps those exports on the worker global.
 - CI builds again: the `chips` submodule was registered with the relative URL `./chips`, which git resolves against the superproject's remote (`github.com/8bitworkshop/8bitworkshop/chips`, a 404), so every `git submodule update` failed while cloning it. It now points at `https://github.com/8bitworkshop/chips`, and a unit test rejects relative submodule URLs.

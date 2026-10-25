@@ -87,6 +87,7 @@
   },
   "scripts": {
     "build": "make prepare",
+    "hooks": "git config core.hooksPath .githooks",
     "test": "npm run tsbuild && npm run test-node",
     "tsbuild": "tsc --build tsconfig.json test/tsconfig.json",
     "tslint": "tsc --build -noEmit tsconfig.json test/tsconfig.json",

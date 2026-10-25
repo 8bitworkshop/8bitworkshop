@@ -52,7 +52,7 @@ const JSNES_PRESETS : Preset[] = [
   {id:'chase/game.c', name:'Shiru\'s Chase Game', category:'Other'},
   {id:'hello.wiz', name:'Hello (Wiz)'},
   {id:'hello.bas', name:'Hello World (CVBasic)', category:'CVBasic'},
-  {id:'happy_face.bas', name:'Bouncing Face (CVBasic)', category:'CVBasic'},
+  {id:'happy_face.bas', name:'Bouncing Face (CVBasic)'},
 ];
 
 /// JSNES

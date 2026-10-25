@@ -21,7 +21,7 @@ export var ColecoVision_PRESETS = [
   { id: 'shoot.c', name: 'Solarian Game' },
   { id: 'climber.c', name: 'Climber Game' },
   { id: 'hello.bas', name: 'Hello World (CVBasic)', category: 'CVBasic' },
-  { id: 'happy_face.bas', name: 'Bouncing Face (CVBasic)', category: 'CVBasic' },
+  { id: 'happy_face.bas', name: 'Bouncing Face (CVBasic)' },
 ];
 
 class ColecoVisionPlatform extends BaseZ80MachinePlatform<ColecoVision> implements Platform {
