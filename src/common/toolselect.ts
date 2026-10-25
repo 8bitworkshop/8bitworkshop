@@ -43,6 +43,25 @@ export function getToolForFilename_z80(fn: string): string {
   return "zmac";
 }
 
+// CVBasic is a portable BASIC: the same .bas source builds for Colecovision,
+// MSX, SG-1000/MSM and NES, so each of those platforms sends .bas to it while
+// its other extensions keep their usual tools.
+function withCVBasic(sel: ToolSelector): ToolSelector {
+  return (fn: string) => fn.endsWith(".bas") ? "cvbasic" : sel(fn);
+}
+
+export function getToolForFilename_coleco(fn: string): string {
+  return withCVBasic(getToolForFilename_z80)(fn);
+}
+
+export function getToolForFilename_msx(fn: string): string {
+  return withCVBasic(getToolForFilename_z80)(fn);
+}
+
+export function getToolForFilename_sms(fn: string): string {
+  return withCVBasic(getToolForFilename_z80)(fn);
+}
+
 export function getToolForFilename_6809(fn: string): string {
   if (fn.endsWith(".c")) return "cmoc";
   if (fn.endsWith(".h")) return "cmoc";
@@ -95,6 +114,7 @@ export function getToolForFilename_apple2(fn: string): string {
 export function getToolForFilename_nes(fn: string): string {
   //if (fn.endsWith(".asm")) return "ca65"; // .asm uses ca65
   if (fn.endsWith(".nesasm")) return "nesasm";
+  if (fn.endsWith(".bas")) return "cvbasic";
   return getToolForFilename_6502(fn);
 }
 
@@ -143,15 +163,15 @@ const PLATFORM_TOOLS: { [platform: string]: ToolSelector } = {
   'vector-z80color': getToolForFilename_z80,
   'williams-z80': getToolForFilename_z80,
   'astrocade': getToolForFilename_z80,
-  'coleco': getToolForFilename_z80,
+  'coleco': getToolForFilename_coleco,
   'cpc': getToolForFilename_z80,
   'galaxian': getToolForFilename_z80,
   'gb': getToolForFilename_z80,
   'mcr': getToolForFilename_z80,
-  'msx': getToolForFilename_z80,
+  'msx': getToolForFilename_msx,
   'mw8080bw': getToolForFilename_z80,
   'pacman': getToolForFilename_z80,
-  'sms': getToolForFilename_z80,
+  'sms': getToolForFilename_sms,
   'sound_konami': getToolForFilename_z80,
   'sound_williams': getToolForFilename_z80,
   'vicdual': getToolForFilename_z80,

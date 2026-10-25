@@ -1,0 +1,15 @@
+	'
+	' CVBasic program (NES/Famicom)
+	'
+	' Reference: https://github.com/nanochess/CVBasic/blob/master/manual.txt
+	'
+
+	PALETTE $13, $38			' text colors (the default is all black)
+
+	PRINT AT 33,"HELLO, WORLD!"
+
+	WHILE 1
+		WAIT
+	WEND
+
+	CHRROM 0				' include the built-in font

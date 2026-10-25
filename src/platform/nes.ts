@@ -51,6 +51,8 @@ const JSNES_PRESETS : Preset[] = [
   {id:'hello.cpp', name:'Hello Oscar64', category:'Oscar64'},
   {id:'chase/game.c', name:'Shiru\'s Chase Game', category:'Other'},
   {id:'hello.wiz', name:'Hello (Wiz)'},
+  {id:'hello.bas', name:'Hello World (CVBasic)', category:'CVBasic'},
+  {id:'happy_face.bas', name:'Bouncing Face (CVBasic)', category:'CVBasic'},
 ];
 
 /// JSNES
@@ -333,7 +335,7 @@ class JSNESPlatform extends Base6502Platform implements Platform, Probeable {
   getOriginPC() {	// TODO: is actually NMI
     return (this.readAddress(0xfffa) | (this.readAddress(0xfffb) << 8)) & 0xffff;
   }
-  getDefaultExtensions() { return [...super.getDefaultExtensions(), ".nesasm"]; }
+  getDefaultExtensions() { return [...super.getDefaultExtensions(), ".nesasm", ".bas"]; }
 
   getROMExtension() { return ".nes"; }
 
@@ -625,7 +627,7 @@ class NESMAMEPlatform extends BaseMAME6502Platform implements Platform {
   getPresets() { return JSNES_PRESETS; }
   getToolForFilename = getToolForFilename_nes;
   getOpcodeMetadata = getOpcodeMetadata_6502;
-  getDefaultExtensions() { return [".c", ".cpp", ".acme", ".xa", ".ca65", ".dasm", ".ecs", ".wiz"]; }
+  getDefaultExtensions() { return [".c", ".cpp", ".acme", ".xa", ".ca65", ".dasm", ".ecs", ".wiz", ".bas"]; }
 
 }
 

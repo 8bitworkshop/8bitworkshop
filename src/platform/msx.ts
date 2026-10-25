@@ -2,6 +2,7 @@
 import { MSX1 } from "../machine/msx";
 import { Platform, BaseZ80MachinePlatform } from "../common/baseplatform";
 import { PLATFORMS } from "../common/emu";
+import { getToolForFilename_msx } from "../common/toolselect";
 
 // https://github.com/Konamiman/MSX2-Technical-Handbook
 // https://www.msx.org/wiki/MSX_Cartridge_slot
@@ -17,6 +18,7 @@ var MSX_BIOS_PRESETS = [
   {id:'siegegame.c',    name:'Siege Game'},
   {id:'eliza.c',        name:'Eliza'},
   {id:'hello.wiz',      name:'Hello (Wiz)'},
+  {id:'hello.bas',      name:'Hello World (CVBasic)', category:'CVBasic'},
 ];
 
 // TODO: share with coleco, sms
@@ -41,6 +43,8 @@ class MSXPlatform extends BaseZ80MachinePlatform<MSX1> implements Platform {
 
   newMachine()          { return new MSX1(); }
   getPresets()          { return MSX_BIOS_PRESETS; }
+  getToolForFilename = getToolForFilename_msx;
+  getDefaultExtensions() { return [...super.getDefaultExtensions(), ".bas"]; }
 
   readAddress(a)        { return this.machine.read(a); }
   readVRAMAddress(a)    { return this.machine.readVRAMAddress(a); }

@@ -695,6 +695,20 @@ export const TOOL_META: { [id: string]: ToolMeta } = {
     linkPatterns: SHARED_LINK_PATTERNS,
   },
 
+  cvbasic: {
+    id: 'cvbasic', name: 'CVBasic', kind: 'compiler',
+    extensions: ['.bas'],
+    editorStyle: 'basic',
+    helpURL: 'https://github.com/nanochess/CVBasic/blob/master/manual.txt',
+    wasmModule: 'cvbasic',
+    version: '0.9.2',
+    defineFlag: '-D',
+    defineInline: true,
+    wasiFSZip: 'cvbasic-fs.zip',
+    includePatterns: SHARED_INCLUDE_PATTERNS,
+    linkPatterns: SHARED_LINK_PATTERNS,
+  },
+
   cc2600: {
     id: 'cc2600', name: 'CC2600', kind: 'compiler', arch: '6502',
     extensions: ['.cc2600'],

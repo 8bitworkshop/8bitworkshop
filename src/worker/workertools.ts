@@ -19,6 +19,7 @@ import * as oscar64 from './tools/oscar64'
 import * as xa from './tools/xa'
 import * as urust from './tools/urust'
 import * as dialog from './tools/dialog'
+import * as cvbasic from './tools/cvbasic'
 
 
 export const TOOLS = {
@@ -66,4 +67,5 @@ export const TOOLS = {
   'xa': xa.assembleXA,
   'urust': urust.compileUrust,
   'dialog': dialog.compileDialog,
+  'cvbasic': cvbasic.compileCVBasic,
 }

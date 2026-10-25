@@ -2,6 +2,7 @@
 import { GameGear, SG1000, SMS } from "../machine/sms";
 import { Platform, BaseZ80MachinePlatform } from "../common/baseplatform";
 import { PLATFORMS } from "../common/emu";
+import { getToolForFilename_sms } from "../common/toolselect";
 
 // TODO: merge w/ coleco
 export var SG1000_PRESETS = [
@@ -19,6 +20,7 @@ export var SG1000_PRESETS = [
   {id:'siegegame.c', name:'Siege Game'},
   {id:'shoot.c', name:'Solarian Game'},
   {id:'climber.c', name:'Climber Game'},
+  {id:'hello.bas', name:'Hello World (CVBasic)', category:'CVBasic'},
 ];
 
 const LIB_CV_SMS_PRESETS = [
@@ -38,6 +40,7 @@ const LIB_CV_SMS_PRESETS = [
 // Solarian hardcodes an SMS mode-4 CRAM palette, so it is not offered on Game Gear.
 export var SMS_PRESETS = [
   ...LIB_CV_SMS_PRESETS,
+  {id:'hello.bas', name:'Hello World (CVBasic)', category:'CVBasic'},
 ];
 
 export var GG_PRESETS = [
@@ -50,6 +53,8 @@ class SG1000Platform extends BaseZ80MachinePlatform<SG1000> implements Platform 
 
   newMachine()          { return new SG1000(); }
   getPresets()          { return SG1000_PRESETS; }
+  getToolForFilename = getToolForFilename_sms;
+  getDefaultExtensions() { return [...super.getDefaultExtensions(), ".bas"]; }
 
   readAddress(a)        { return this.machine.read(a); }
   readVRAMAddress(a)    { return this.machine.readVRAMAddress(a); }
@@ -59,6 +64,8 @@ class SMSPlatform extends BaseZ80MachinePlatform<SMS> implements Platform {
 
   newMachine()          { return new SMS(); }
   getPresets()          { return SMS_PRESETS; }
+  getToolForFilename = getToolForFilename_sms;
+  getDefaultExtensions() { return [...super.getDefaultExtensions(), ".bas"]; }
 
   readAddress(a)        { return this.machine.read(a); }
   readVRAMAddress(a)    { return this.machine.readVRAMAddress(a); }
@@ -68,6 +75,8 @@ class GameGearPlatform extends BaseZ80MachinePlatform<GameGear> implements Platf
 
   newMachine()          { return new GameGear(); }
   getPresets()          { return GG_PRESETS; }
+  getToolForFilename = getToolForFilename_sms;
+  getDefaultExtensions() { return [...super.getDefaultExtensions(), ".bas"]; }
 
   readAddress(a)        { return this.machine.read(a); }
   readVRAMAddress(a)    { return this.machine.readVRAMAddress(a); }

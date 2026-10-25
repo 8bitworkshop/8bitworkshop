@@ -1,0 +1,11 @@
+	'
+	' CVBasic program
+	'
+	' Reference: https://github.com/nanochess/CVBasic/blob/master/manual.txt
+	'
+
+	PRINT AT 0,"HELLO, WORLD!"
+
+	WHILE 1
+		WAIT
+	WEND

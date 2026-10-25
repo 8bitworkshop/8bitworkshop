@@ -1,6 +1,7 @@
 
 import { ColecoVision } from "../machine/coleco";
 import { Platform, BaseZ80MachinePlatform, getToolForFilename_z80 } from "../common/baseplatform";
+import { getToolForFilename_coleco } from "../common/toolselect";
 import { PLATFORMS } from "../common/emu";
 import { BaseMAMEZ80Platform } from "../common/mameplatform";
 
@@ -19,12 +20,16 @@ export var ColecoVision_PRESETS = [
   { id: 'siegegame.c', name: 'Siege Game' },
   { id: 'shoot.c', name: 'Solarian Game' },
   { id: 'climber.c', name: 'Climber Game' },
+  { id: 'hello.bas', name: 'Hello World (CVBasic)', category: 'CVBasic' },
+  { id: 'happy_face.bas', name: 'Bouncing Face (CVBasic)', category: 'CVBasic' },
 ];
 
 class ColecoVisionPlatform extends BaseZ80MachinePlatform<ColecoVision> implements Platform {
 
   newMachine()          { return new ColecoVision(); }
   getPresets()          { return ColecoVision_PRESETS; }
+  getToolForFilename = getToolForFilename_coleco;
+  getDefaultExtensions() { return [...super.getDefaultExtensions(), ".bas"]; }
   readAddress(a)        { return this.machine.read(a); }
   readVRAMAddress(a)    { return this.machine.readVRAMAddress(a); }
   // TODO loadBIOS(bios)	{ this.machine.loadBIOS(a); }
@@ -63,8 +68,8 @@ class ColecoVisionMAMEPlatform extends BaseMAMEZ80Platform implements Platform {
 
   getPresets() { return ColecoVision_PRESETS; }
 
-  getToolForFilename = getToolForFilename_z80;
-  getDefaultExtensions() { return [".c", ".ns", ".s", ".scc", ".sgb", ".z", ".wiz"]; }
+  getToolForFilename = getToolForFilename_coleco;
+  getDefaultExtensions() { return [".c", ".ns", ".s", ".scc", ".sgb", ".z", ".wiz", ".bas"]; }
 }
 
 
