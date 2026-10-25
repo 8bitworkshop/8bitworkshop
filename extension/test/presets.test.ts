@@ -48,7 +48,12 @@ describe('copying a preset', function () {
   it('finds a preset with or without its extension, and says when that is ambiguous', function () {
     assert.equal(findTemplate(index, 'nes/aputest.c').template.id, 'aputest.c');
     assert.equal(findTemplate(index, 'NES/Aputest').template.id, 'aputest.c');
-    assert.throws(() => findTemplate(index, 'nes/hello'), /matches 3 presets/);
+    // nes/hello names several presets (hello.c, hello.bas, ...): list them all
+    var hello = index.platforms.find((p) => p.id === 'nes')!.templates
+      .map((t) => t.id).filter((id) => id.replace(/\.[^./]+$/, '').toLowerCase() === 'hello');
+    assert.ok(hello.length > 1, 'nes/hello should be ambiguous');
+    assert.throws(() => findTemplate(index, 'nes/hello'), (err: Error) =>
+      err.message === `'nes/hello' matches ${hello.length} presets (${hello.join(', ')}); give the extension.`);
     assert.throws(() => findTemplate(index, 'nes/nope'), /No preset 'nope'/);
     assert.throws(() => findTemplate(index, 'nope/hello.c'), /No platform/);
     assert.throws(() => findTemplate(index, 'hello.c'), /<platform>\/<file>/);
