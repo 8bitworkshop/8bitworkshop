@@ -789,6 +789,9 @@ export const TOOL_META: { [id: string]: ToolMeta } = {
     wasiFSZip: 'urust-fs.zip',
     includeDirs: ['/rs8'],
     includePatterns: URUST_INCLUDE_PATTERNS,
+    platforms: {
+      zx: { buildArgs: { compiler: ['--format', 'z80'] } },
+    },
   },
 
   // ---- verilog / HDL ----
