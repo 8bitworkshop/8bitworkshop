@@ -78,37 +78,22 @@ export class VIC20_WASMMachine extends BaseWASMMachine implements Machine, Probe
     // load rom
     if (this.romptr && this.romlen) {
       let rom = this.romarr;
-      this.exports.machine_load_rom(this.sys, this.romptr, this.romlen);
       let iscart = rom[4+2]==0x41 && rom[5+2]==0x30 && rom[6+2]==0xC3 && rom[7+2]==0xC2 && rom[8+2]==0xCD;
       if (!iscart) {
-        this.prgstart = rom[0] + (rom[1]<<8); // get load address
-        // look for BASIC program start
-        if (this.prgstart == 0x1001) {
-          this.prgstart = rom[2] + (rom[3]<<8) + 2; // point to after BASIC program
-          console.log("prgstart", hex(this.prgstart));
-        }
-        // is program loaded into RAM?
-        if (this.prgstart < 0x8000) {
-          // advance BIOS a few frames
-          this.exports.machine_exec(this.sys, 500000);
-          // type in command (SYS 2061)
-          var cmd = "SYS "+this.prgstart+"\r";
-          console.log(cmd);
-          for (var i=0; i<cmd.length; i++) {
-            var key = cmd.charCodeAt(i);
-            this.exports.machine_exec(this.sys, 10000);
-            this.exports.machine_exec(this.sys, 10000);
-            this.exports.machine_key_down(this.sys, key);
-            this.exports.machine_exec(this.sys, 10000);
-            this.exports.machine_exec(this.sys, 10000);
-            this.exports.machine_key_up(this.sys, key);
-          }
-          // advance clock until program starts
-          for (var i=0; i<10000 && this.getPC() != this.prgstart; i++) {
-            this.exports.machine_tick(this.sys);
-          }
+        // boot first: the KERNAL's cold start clears $0000-$03FF and
+        // initializes the BASIC pointers, so a PRG loaded before it
+        // could be damaged
+        this.exports.machine_exec(this.sys, 500000);
+        this.exports.machine_load_rom(this.sys, this.romptr, this.romlen);
+        this.prgstart = this.getPRGStart(rom);
+        console.log("prgstart", hex(this.prgstart));
+        if (this.hasBASIC()) {
+          this.typeSYS(this.prgstart);
+        } else {
+          this.callAt(this.prgstart);
         }
       } else {
+        this.exports.machine_load_rom(this.sys, this.romptr, this.romlen);
         // get out of reset
         //this.exports.machine_exec(this.sys, 100);
         // wait until cartridge start
@@ -122,6 +107,90 @@ export class VIC20_WASMMachine extends BaseWASMMachine implements Machine, Probe
       // TODO: shouldn't we return here @ start of frame?
       // and stop probing
     }
+  }
+  // where to start a PRG: the SYS address of its BASIC stub, or else its
+  // load address. A BASIC program starts at $1001, or $0401 or $1201 with
+  // memory expansion; a stub with no SYS is assumed to be followed by
+  // machine code.
+  getPRGStart(prg: Uint8Array) : number {
+    let loadaddr = prg[0] + (prg[1]<<8);
+    if (loadaddr != 0x1001 && loadaddr != 0x0401 && loadaddr != 0x1201) return loadaddr;
+    // BASIC line: link(2) lineno(2) tokens... 0
+    let i = 6;
+    while (i < prg.length && (prg[i] == 0x20 || prg[i] == 0x3a)) i++;
+    if (prg[i++] == 0x9e) {
+      let addr = 0;
+      for (; i < prg.length; i++) {
+        let ch = prg[i];
+        if (ch >= 0x30 && ch <= 0x39) addr = addr * 10 + (ch & 0xf);
+        else if (ch != 0x20) break;
+      }
+      return addr;
+    }
+    return prg[2] + (prg[3]<<8) + 2; // point to after BASIC program
+  }
+  // does the BIOS have a BASIC ROM? ("CBMBASIC" signature at $C004)
+  hasBASIC() : boolean {
+    return "CBMBASIC".split('').every((ch, i) => this.exports.machine_mem_read(this.sys, 0xc004+i) == ch.charCodeAt(0));
+  }
+  // type in "SYS addr" at the BASIC prompt and run until the program starts
+  typeSYS(addr: number) {
+    var cmd = "SYS "+addr+"\r";
+    console.log(cmd);
+    for (var i=0; i<cmd.length; i++) {
+      var key = cmd.charCodeAt(i);
+      this.exports.machine_exec(this.sys, 10000);
+      this.exports.machine_exec(this.sys, 10000);
+      this.exports.machine_key_down(this.sys, key);
+      this.exports.machine_exec(this.sys, 10000);
+      this.exports.machine_exec(this.sys, 10000);
+      this.exports.machine_key_up(this.sys, key);
+    }
+    // advance clock until program starts
+    for (var i=0; i<200000 && this.getPC() != addr; i++) {
+      this.exports.machine_tick(this.sys);
+    }
+    if (this.getPC() != addr) console.log("SYS did not start the program", hex(addr));
+  }
+  // no BASIC: call the program as if by JSR from the KERNAL's idle loop, so
+  // returning from it goes back to the idle loop (the cc65 startup ends with
+  // RTS). The CPU can't be pointed at an address from here, so hijack the
+  // IRQ vector ($0314) with a stub in the BASIC input buffer: when the next
+  // interrupt reaches it, it restores the registers and status the KERNAL
+  // pushed and jumps to the program, with the interrupted address - 1 left
+  // on the stack for the program's RTS.
+  callAt(addr: number) {
+    const STUB = 0x0200; // the BASIC input buffer, unused without BASIC
+    const rd = (a: number) => this.exports.machine_mem_read(this.sys, a);
+    const wr = (a: number, v: number) => this.exports.machine_mem_write(this.sys, a, v);
+    const cinv = [rd(0x314), rd(0x315)];
+    const stub = [
+      0xa9, cinv[0], 0x8d, 0x14, 0x03,  // lda #<cinv; sta $0314
+      0xa9, cinv[1], 0x8d, 0x15, 0x03,  // lda #>cinv; sta $0315
+      0x68, 0xa8, 0x68, 0xaa, 0x68,     // pla; tay; pla; tax; pla
+      0x28,                             // plp
+      0x4c, addr & 0xff, addr >> 8,     // jmp addr
+    ];
+    stub.forEach((v, i) => wr(STUB + i, v));
+    wr(0x314, STUB & 0xff);
+    wr(0x315, STUB >> 8);
+    // wait for the interrupt (the stub is entered with the SYNC pin set)
+    for (var i=0; i<200000 && !(this.getPC() == STUB && this.isStable()); i++) {
+      this.exports.machine_tick(this.sys);
+    }
+    if (i == 200000) {
+      console.log("no interrupt, can't start", hex(addr));
+      wr(0x314, cinv[0]);
+      wr(0x315, cinv[1]);
+      return;
+    }
+    // the stack holds Y, X, A, P, PCL, PCH (lowest address first)
+    this.exports.machine_save_cpu_state(this.sys, this.cpustateptr);
+    var sp = this.cpustatearr[9];
+    var lo = 0x100 + ((sp + 5) & 0xff);
+    var ret = rd(lo) + (rd(0x100 + ((sp + 6) & 0xff)) << 8) - 1;
+    wr(lo, ret & 0xff);
+    wr(0x100 + ((sp + 6) & 0xff), ret >> 8);
   }
   advanceFrame(trap: TrapCondition) : number {
     // TODO: does this sync with VSYNC?

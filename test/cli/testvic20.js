@@ -122,3 +122,32 @@ describe('VIC-20 debug info', function () {
         }
     });
 });
+
+/*
+    PRG files that write 'H' (screen code 8) to the top left of the screen
+    and spin, once as a BASIC stub (10 SYS4109, the machine code follows it)
+    and once as plain machine code in the tape buffer.
+
+        LDA #$08       ; A9 08
+        STA $1E00      ; 8D 00 1E
+        JMP *          ; 4C xx xx
+*/
+function code(addr) {
+    return [0xA9, 0x08, 0x8D, 0x00, 0x1E, 0x4C, (addr + 5) & 0xFF, (addr + 5) >> 8];
+}
+var SYS_PRG = [0x01, 0x10, 0x0B, 0x10, 0x0A, 0x00, 0x9E, 0x34, 0x31, 0x30, 0x39, 0x00, 0x00, 0x00]
+    .concat(code(0x100D));
+var RAW_PRG = [0x3C, 0x03].concat(code(0x033C));
+
+describe('VIC-20 quickload', function () {
+    [['a BASIC stub with SYS', SYS_PRG], ['machine code at the load address', RAW_PRG]].forEach(function (t) {
+        it('should run ' + t[0], async function () {
+            this.timeout(60000);
+            var target = await loadPlatform('vic20');
+            await target.start();
+            await target.loadROM(new Uint8Array(t[1]), 'test.prg');
+            for (var i = 0; i < 60; i++) target.advanceFrame();
+            assert.equal(target.read(0x1E00), 8, 'the program did not run');
+        });
+    });
+});
