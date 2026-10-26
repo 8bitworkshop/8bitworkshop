@@ -10,10 +10,17 @@
 //
 // Targets: worker, ui, server, all (default)
 import esbuild from 'esbuild';
+import { readFileSync } from 'fs';
 import mdPlugin from './md-loader.mjs';
 
-// identifies this build; the IDE puts it in the worker URL to defeat stale caches
-const define = { __BUILD_ID__: JSON.stringify(Date.now().toString(36)) };
+const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+
+const define = {
+  // identifies this build; the IDE puts it in the worker URL to defeat stale caches
+  __BUILD_ID__: JSON.stringify(Date.now().toString(36)),
+  // the version shown in the IDE's About menu
+  __APP_VERSION__: JSON.stringify(pkg.version),
+};
 
 const configs = {
   worker: {

@@ -19,11 +19,8 @@ for the complete list.
 ## Use Online
 
 Latest release:
-- https://8bitworkshop.com/redir.html
-
-Bleeding edge (built from HEAD):
+- https://8bitworkshop.com/latest/
 - https://8bitworkshop.github.io/8bitworkshop/
-- https://8bitworkshop.com/latest/ (same, redirects to GitHub)
 
 ## Features
 

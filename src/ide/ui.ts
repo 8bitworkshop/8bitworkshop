@@ -14,6 +14,7 @@ import {
   getRootBasePlatform, getWithBinary, hex, highlightDifferences, isProbablyBinary, isProductionHost, loadScript, parseBool, stringToByteArray
 } from "../common/util";
 import { getSkeletonName, getPlatformToolHelpURL, getToolMeta, getToolVersionLabel, TOOL_META } from "../common/toolmeta";
+import { getAppVersionLabel } from "../common/version";
 import { PLATFORM_PARAMS } from "../worker/platforms";
 import { hasErrors } from "../worker/listingutils";
 import { CodeListingMap, FileData, WorkerError, WorkerResult, isErrorResult } from "../common/workertypes";
@@ -1929,6 +1930,13 @@ function showContextHelp() {
   }
 }
 
+// Show the IDE's own version (from package.json) in the About menu.
+function showAppVersion() {
+  var label = getAppVersionLabel();
+  if (!label) return;
+  $("#item_app_version").text("8bitworkshop " + label).show();
+}
+
 function openToolVersions() {
   const esc = (s: any) => String(s == null ? '' : s)
     .replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -2573,6 +2581,7 @@ export function getPlatformAndRepo() {
 
 // start
 export async function startUI() {
+  showAppVersion();
   // import from github?
   if (qs.githubURL) {
     importProjectFromGithub(qs.githubURL, true);
