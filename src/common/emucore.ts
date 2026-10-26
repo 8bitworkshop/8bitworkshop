@@ -605,7 +605,14 @@ export class EmuCore {
     const t = h.now();
     const r = h.isInPast() ? h.seek(timestamp(t.frame + 1, 0), trap) : h.recordFrame(trap);
     if (r.halt) throw r.halt;
+    // The timeline drives the machine directly, so the platform's own
+    // nextFrame() (which checks for a trap spin) is not in this path.
+    if (!r.trapped && r.at.step === 0) this.checkTrapSpin();
     return r.trapped;
+  }
+
+  private checkTrapSpin(): void {
+    (this.platform as any).checkTrapSpin?.();
   }
 
   private advanceUntimed(trap?: TrapCondition | null): boolean {
@@ -616,10 +623,14 @@ export class EmuCore {
     // rewinds BaseDebugPlatform's saved state.
     if (trap && m) {
       m.advanceFrame(() => (hit = hit || !!trap()));
+      if (!hit) this.checkTrapSpin();
     } else {
       const p = this.platform as any;
       if (p.nextFrame) p.nextFrame();
-      else if (p.advance) p.advance(false);
+      else if (p.advance) {
+        p.advance(false);
+        this.checkTrapSpin();
+      }
       hit = !!trap?.();
     }
     this.untimedFrames++;

@@ -285,6 +285,8 @@ export class RAM {
 
 export class EmuHalt extends Error {
   $loc: SourceLocation;
+  /** The address a fault came from, when it is not the current PC (a trap). */
+  pc?: number;
   squelchError = true;
   /**
    * true when the program stopped by design (e.g. a semihost exit), as opposed
@@ -344,6 +346,12 @@ class AnimationTimerImpl {
       } catch (e) {
         this.running = false;
         this.pulsing = false;
+        // A halted program is a normal stop for the host: show it where it
+        // stopped instead of letting the browser report an uncaught error.
+        if (e instanceof EmuHalt) {
+          haltEmulation(e);
+          return;
+        }
         throw e;
       }
     }

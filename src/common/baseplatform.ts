@@ -3,7 +3,7 @@ import { CodeAnalyzer } from "./analysis";
 import { disassemble6502 } from "./cpu/disasm6502";
 import { disassembleZ80 } from "./cpu/disasmz80";
 import { Z80 } from "./cpu/ZilogZ80";
-import { AnimationTimer, ControllerPoller, RasterVideo, drawCrosshair, dumpRAM } from "./emu";
+import { AnimationTimer, ControllerPoller, EmuHalt, RasterVideo, drawCrosshair, dumpRAM } from "./emu";
 import { byteToASCII, hex, invertMap, printFlags } from "./util";
 import { FileData, Segment } from "./workertypes";
 import { getToolForFilename_6502, getToolForFilename_6809, getToolForFilename_arm32, getToolForFilename_z80 } from "./toolselect";
@@ -132,6 +132,8 @@ export interface Platform {
   getSP?(): number;
   getPC?(): number;
   getOriginPC?(): number;
+  /** Stop a program that has sat on a trap stub's spin for several frames. */
+  checkTrapSpin?(): void;
   newCodeAnalyzer?(): CodeAnalyzer;
 
   getPlatformName?(): string;
@@ -264,6 +266,40 @@ export abstract class BasePlatform {
   }
 }
 
+// How many consecutive frame boundaries the CPU has to sit on a trap spin
+// before the program is declared dead. A debugger can stop in the stub for a
+// frame (a breakpoint, a single step), and one frame is not enough to tell a
+// real hang from that.
+export const TRAP_SPIN_FRAMES = 10;
+
+function readTrapStackByte(platform: BaseDebugPlatform, addr: number): number | null {
+  const p = <any>platform;
+  if (typeof p.readAddress === 'function') return p.readAddress(addr) & 0xff;
+  if (p.machine && typeof p.machine.readConst === 'function') return p.machine.readConst(addr) & 0xff;
+  if (p.machine && typeof p.machine.read === 'function') return p.machine.read(addr) & 0xff;
+  return null;
+}
+
+// A jsr pushes its last byte, so the return address on top of the stack is
+// site + 2. SP points just below the last byte pushed.
+function trapSite6502(platform: BaseDebugPlatform): number | null {
+  const sp = platform.getSP();
+  if (typeof sp !== 'number') return null;
+  const lo = readTrapStackByte(platform, 0x100 + ((sp + 1) & 0xff));
+  const hi = readTrapStackByte(platform, 0x100 + ((sp + 2) & 0xff));
+  if (lo == null || hi == null) return null;
+  return (((hi << 8) | lo) - 2) & 0xffff;
+}
+
+// A call pushes site + 3; SP points at the low byte of the return address.
+function trapSiteZ80(platform: BaseDebugPlatform): number | null {
+  const sp = platform.getSP() & 0xffff;
+  const lo = readTrapStackByte(platform, sp);
+  const hi = readTrapStackByte(platform, (sp + 1) & 0xffff);
+  if (lo == null || hi == null) return null;
+  return (((hi << 8) | lo) - 3) & 0xffff;
+}
+
 export abstract class BaseDebugPlatform extends BasePlatform {
   onBreakpointHit: BreakpointCallback;
   debugCallback: DebugCondition;
@@ -273,6 +309,7 @@ export abstract class BaseDebugPlatform extends BasePlatform {
   debugClock: number = 0;
   breakpoints: BreakpointList = new BreakpointList();
   frameCount: number = 0;
+  private trapSpinFrames: number = 0;
 
   abstract getCPUState(): CpuState;
 
@@ -321,6 +358,7 @@ export abstract class BaseDebugPlatform extends BasePlatform {
     this.onBreakpointHit = null;
     this.clearBreakpoint('debug');
     this.frameCount = 0;
+    this.trapSpinFrames = 0;
   }
   setDebugCondition(debugCond: DebugCondition) {
     this.setBreakpoint('debug', debugCond);
@@ -363,12 +401,53 @@ export abstract class BaseDebugPlatform extends BasePlatform {
     this.preFrame();
     var steps = this.advance(novideo);
     this.postFrame();
+    this.checkTrapSpin();
     return steps;
   }
   // default debugging
   abstract getSP(): number;
   abstract getPC(): number;
   abstract isStable(): boolean;
+
+  /**
+   * The site of a trap the CPU is sitting on, read from the return address a
+   * `jsr` (6502) or `call` (Z80) pushed. Null where there is no such stack.
+   */
+  getTrapSite(): number | null {
+    return null;
+  }
+
+  /**
+   * urust's trap stub ends in a jump-to-self at `__trap_spin`. A program that
+   * reaches it has panicked and will never leave, but it is the program's way
+   * of stopping, so hosts would otherwise run it forever. Ten consecutive
+   * frame boundaries on the symbol is a hang; report the site the stub was
+   * called from and stop.
+   */
+  checkTrapSpin(): void {
+    const spin = this.debugSymbols?.symbolmap?.['__trap_spin'];
+    if (typeof spin !== 'number') {
+      this.trapSpinFrames = 0;
+      return;
+    }
+    const pc = this.getPC();
+    // A clock-based CPU can end a frame mid-instruction, and its PC then names
+    // something other than the opcode (the VIC-20/C64 WASM cores do). Once a
+    // stable frame has put us on the spin, an unstable frame keeps the count:
+    // the CPU is still executing the jump-to-self.
+    if (this.isStable() || this.trapSpinFrames === 0) {
+      if (pc !== spin) {
+        this.trapSpinFrames = 0;
+        return;
+      }
+    }
+    if (++this.trapSpinFrames < TRAP_SPIN_FRAMES) return;
+    this.trapSpinFrames = 0;
+    const site = this.getTrapSite();
+    const halt = new EmuHalt(site != null ? `Program trapped at $${hex(site, 4)}` : 'Program trapped in __trap_spin');
+    halt.pc = site != null ? site : spin;
+    throw halt;
+  }
 
   evalDebugCondition() {
     if (this.debugCallback && !this.debugBreakState) {
@@ -534,6 +613,10 @@ export abstract class Base6502Platform extends BaseDebugPlatform {
     return (this.readAddress(0xfffc) | (this.readAddress(0xfffd) << 8)) & 0xffff;
   }
 
+  getTrapSite() {
+    return trapSite6502(this);
+  }
+
   disassemble(pc: number, read: (addr: number) => number): DisasmLine {
     return disassemble6502(pc, read(pc), read(pc + 1), read(pc + 2));
   }
@@ -636,6 +719,10 @@ export abstract class BaseZ80Platform extends BaseDebugPlatform {
   getSP() { return this._cpu.getSP(); }
   isStable() { return true; }
 
+  getTrapSite() {
+    return trapSiteZ80(this);
+  }
+
   // TODO: refactor other parts into here
   runCPU(cpu, cycles: number): number {
     this._cpu = cpu; // TODO?
@@ -701,6 +788,9 @@ export function cpuStateToLongString_6809(c) {
 }
 
 export abstract class Base6809Platform extends BaseZ80Platform {
+
+  // The 6809's stack layout is not the Z80's; urust does not target it.
+  getTrapSite() { return null; }
 
   newCPU(membus: MemoryBus) {
     var cpu = Object.create(CPU6809());
@@ -1065,6 +1155,10 @@ export abstract class BaseMachinePlatform<T extends Machine> extends BaseDebugPl
 
 export abstract class Base6502MachinePlatform<T extends Machine> extends BaseMachinePlatform<T> {
 
+  getTrapSite() {
+    return trapSite6502(this);
+  }
+
   getOpcodeMetadata = getOpcodeMetadata_6502;
   getToolForFilename(fn) { return getToolForFilename_6502(fn); }
   getDefaultExtensions() { return [".c", ".cpp", ".o64", ".acme", ".xa", ".ca65", ".dasm", ".ecs", ".wiz"]; }
@@ -1089,6 +1183,10 @@ export abstract class Base6502MachinePlatform<T extends Machine> extends BaseMac
 }
 
 export abstract class BaseZ80MachinePlatform<T extends Machine> extends BaseMachinePlatform<T> {
+
+  getTrapSite() {
+    return trapSiteZ80(this);
+  }
 
   //getOpcodeMetadata     = getOpcodeMetadata_z80;
   getToolForFilename = getToolForFilename_z80;

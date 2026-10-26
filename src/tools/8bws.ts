@@ -21,6 +21,7 @@ import { verifyReplay } from './verifyreplay';
 import { openVcdFile } from './vcdfile';
 import { buildDebugContext } from '../common/debugcontroller';
 import { buildProducts } from '../common/workertypes';
+import { DebugSymbols } from '../common/baseplatform';
 import type { BuildInfo } from './debugservice';
 import { parseSymbolFile } from '../common/symbols/symbolfile';
 import { romBytes, type CompileResult } from './testlib';
@@ -309,6 +310,9 @@ async function openProgram(command: string, args: Args, input: string): Promise<
   }
 
   const target = await openTarget(args, platformId);
+  // The IDE installs the build's symbols on the platform; do the same here so
+  // the debugger, the CLI's symbol lookups and the trap-spin watchdog see them.
+  if (built) target.platform.debugSymbols = new DebugSymbols(built.symbolmap, {}, built.result.symbolsizes);
   // The temp file is always written as .rom, but some platforms use the title
   // to pick a load format -- an Atari XEX named .rom would load as a cartridge.
   if (built) target.setFileData(built.result.files || {});
