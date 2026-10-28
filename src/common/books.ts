@@ -33,3 +33,47 @@ export function bookFor(platform: string): Book | undefined {
   return BOOKS.find(b => b.platforms.includes(base))
     || BOOKS.find(b => b.platforms.includes(root));
 }
+
+/** A demo from one of the books: the platform to open and its example file. */
+export interface BookDemo {
+  /** book id (see BOOKS) */
+  book: string;
+  platform: string;
+  /** preset id, relative to presets/<platform>/ */
+  file: string;
+}
+
+// The demos a first-time visitor can land on instead of Hello World.
+// Each is a book's finished game, so the IDE opens on something that runs.
+export const BOOK_DEMOS: BookDemo[] = [
+  { book: 'vcs', platform: 'vcs', file: 'examples/brickgame.a' },
+  { book: 'arcade', platform: 'galaxian-scramble', file: 'shoot2.c' },
+  { book: 'verilog', platform: 'verilog', file: 'racing_game_cpu.v' },
+  { book: 'nes', platform: 'nes', file: 'climber.c' },
+  { book: 'c64', platform: 'c64', file: 'side_scroller.c' },
+];
+
+/** A random book demo; rand is injectable so tests are deterministic. */
+export function pickRandomBookDemo(rand: () => number = Math.random): BookDemo {
+  return BOOK_DEMOS[Math.floor(rand() * BOOK_DEMOS.length) % BOOK_DEMOS.length];
+}
+
+/** The parts of the IDE's query string that decide what a first launch opens. */
+export interface FirstVisitQuery {
+  platform?: string;
+  file?: string;
+  repo?: string;
+  importURL?: string;
+  file0_name?: string;
+}
+
+/**
+ * The demo to open on a first launch, or null to keep the default platform.
+ * A query that names its own platform, file, repo or upload keeps the old
+ * behavior (the platform's first preset on vcs).
+ */
+export function firstVisitDemo(query: FirstVisitQuery, firstVisit: boolean, rand?: () => number): BookDemo | null {
+  if (!firstVisit) return null;
+  if (query.platform || query.file || query.repo || query.importURL || query.file0_name) return null;
+  return pickRandomBookDemo(rand);
+}

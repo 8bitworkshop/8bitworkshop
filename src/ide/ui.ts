@@ -4,7 +4,7 @@
 import * as localforage from "localforage";
 import { BaseDebugPlatform, DebugEvalCondition, DebugSymbols, EmuState, isDebuggable, Platform, Preset } from "../common/baseplatform";
 import { EmuHalt, PLATFORMS, setHaltHandler } from "../common/emu";
-import { BOOKS, bookFor } from "../common/books";
+import { BOOKS, bookFor, firstVisitDemo } from "../common/books";
 import { PLATFORM_CONTROLS } from "../common/controls";
 import { isAudioBlocked, onAudioStateChange } from "../common/audio";
 import { installHDLHost } from "./hdlhost";
@@ -178,6 +178,10 @@ class UserPrefs {
   }
   getLastRepoID(platform: string) {
     return hasLocalStorage && !isEmbed && platform && localStorage.getItem("__lastrepo_" + platform);
+  }
+  // no platform has ever been loaded in this browser, so this is a first launch
+  isFirstVisit() {
+    return hasLocalStorage && !isEmbed && !localStorage.getItem("__lastplatform");
   }
   shouldCompleteTour() {
     return hasLocalStorage && !isEmbed && !localStorage.getItem("8bitworkshop.hello");
@@ -2575,7 +2579,15 @@ export function getPlatformAndRepo() {
   // add default platform
   if (!platform_id) {
     if (isEmbed) fatalError(`The 'platform' must be specified when embed=1`);
-    platform_id = qs.platform = "vcs";
+    // first launch: open a random demo from the books instead of Hello World
+    const demo = firstVisitDemo(qs, userPrefs.isFirstVisit());
+    if (demo) {
+      console.log(`first launch: opening book demo ${demo.platform}/${demo.file}`);
+      platform_id = qs.platform = demo.platform;
+      qs.file = demo.file;
+    } else {
+      platform_id = qs.platform = "vcs";
+    }
   }
 }
 
