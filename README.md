@@ -43,11 +43,14 @@ Requirements:
 * `make` and `git`
 * Python 3 (for the local dev server)
 
-To clone just the main branch:
+To clone just the main branch, with blobs fetched lazily:
 
 ```sh
-git clone -b master --single-branch git@github.com:sehugg/8bitworkshop.git
+git clone --filter=blob:none -b master --single-branch \
+  git@github.com:8bitworkshop/8bitworkshop.git
 ```
+
+Drop the `--filter` option if you want to browse history offline.
 
 To build the 8bitworkshop IDE:
 
