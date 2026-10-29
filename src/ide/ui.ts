@@ -1089,7 +1089,7 @@ async function loadBIOSFromProject() {
   if (platform.loadBIOS) {
     var biospath = platform_id + '.rom';
     var biosdata = await store.getItem(biospath);
-    if (biosdata instanceof Uint8Array) {
+    if (biosdata != null && biosdata instanceof Uint8Array) {
       console.log('loading BIOS', biospath, biosdata.length + " bytes")
       try {
         platform.loadBIOS(biospath, biosdata);
@@ -2158,28 +2158,14 @@ async function showWelcomeMessage() {
       steps.unshift({
         element: "#dropdownMenuButton",
         placement: 'right',
-        title: "Cookie Consent",
-        content: 'Before we start, we should tell you that this website stores persistent data in your browser. Review our <a href="/privacy.html" target="_new">privacy policy</a>.'
+        title: "Privacy Notice",
+        content: 'Before we start: we store persistent data in your browser and send performance data to our server. Review our <a href="/privacy.html" target="_new">privacy policy</a>.'
       });
       steps.push({
         element: "#booksMenuButton",
         placement: 'left',
         title: "Books",
         content: "Get some books that explain how to program all of this stuff, and write some games!"
-      });
-    }
-    if (isElectron) {
-      steps.unshift({
-        element: "#dropdownMenuButton",
-        placement: 'right',
-        title: "Developer Analytics",
-        content: 'BTW, we send stack traces to 8bitworkshop.com when exceptions are thrown. Hope that\'s ok.'
-      });
-      steps.unshift({
-        element: "#dropdownMenuButton",
-        placement: 'right',
-        title: "Welcome to 8bitworkshop Desktop!",
-        content: 'The directory "~/8bitworkshop" contains all of your file edits and built ROM images. You can create new projects under the platform directories (e.g. "c64/myproject")'
       });
     }
     var tour = new Tour({
