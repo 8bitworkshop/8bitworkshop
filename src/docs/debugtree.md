@@ -25,12 +25,21 @@ while debugging.
 ## Source variables
 
 A build can carry source-level variables with their home addresses and
-live ranges. urust reports them in its `--debug-out` JSON, and the tree
-then shows a **Locals** node: the variables whose code range contains the
-current PC, with their values read from memory. A reassigned variable
-appears once, at the definition that is live at the PC; cells overlaid by
-other variables are not shown. Values the optimizer kept no storage for
-appear as `<optimized out>`, never as a guess.
+live ranges. urust reports them in its `--debug-out` JSON, and oscar64 in
+the `.dbj` file it writes with `-g`; the tree then shows a **Locals** node:
+the variables whose code range contains the current PC, with their values
+read from memory. A reassigned variable appears once, at the definition
+that is live at the PC; cells overlaid by other variables are not shown.
+Values the optimizer kept no storage for appear as `<optimized out>`,
+never as a guess.
+
+oscar64 reports a local's visibility as the source lines where it is in
+scope, not as code addresses, so its parser maps those lines through the
+function's line table. Locals on the call stack or in a frame are read
+through oscar64's zero-page stack or frame pointer at each stop. Its
+default `-O1` build folds most locals into registers or temporaries, and
+those cannot be shown; add `//#flag c -O0` to a program that you want to
+inspect in the debugger.
 
 Selecting a variable in the editor shows its live value in the same way,
 and `8bws run ... -e "tree Locals"` prints the node from the CLI.

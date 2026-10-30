@@ -2,7 +2,10 @@
 // hold at a stop. urust writes them to its `--debug-out` JSON as a `variables`
 // array: each definition records its home address and the [from, to) code
 // range it is live over (cells are overlaid over time, so one address can hold
-// different variables at different points of a function).
+// different variables at different points of a function). oscar64's `.dbj`
+// gives locals enter/leave source lines instead, which its parser turns into
+// one or more code ranges; a stack- or frame-relative home is an offset from
+// a zero-page pointer that is read at each stop.
 //
 // A debugger shows only the definitions whose range contains the PC, plus the
 // ones the optimizer folded away (reported as "optimized out", never guessed).
@@ -18,10 +21,17 @@ export interface SourceVariable {
   size: number;
   /** the function it belongs to */
   function: string;
-  /** the address of its home, null when it has no storage */
+  /** the address of its home, null when it has no storage. When `baseAddr`
+   *  is set this is an offset from the pointer stored there. */
   addr?: number | null;
+  /** the zero-page address of a pointer that `addr` is relative to, for
+   *  variables on a call stack or in a frame */
+  baseAddr?: number | null;
   /** the [from, to) code range it is live over, null when not known */
   range?: [number, number] | null;
+  /** several disjoint live ranges, when the compiler only reports source
+   *  line visibility (oscar64); `range` is the single-range urust form */
+  ranges?: [number, number][] | null;
   codeBank?: number | null;
   file?: string | null;
   /** 1-based declaration position */
@@ -76,9 +86,22 @@ export function liveSourceVariables(vars: SourceVariable[], pc: number,
   symbolmap: { [name: string]: number }, symbolsizes?: { [name: string]: number }): SourceVariable[] {
   const fn = functionAtPC(pc, symbolmap, symbolsizes);
   return vars.filter(v => {
+    if (v.ranges && v.ranges.length) return v.ranges.some(r => pc >= r[0] && pc < r[1]);
     if (v.range) return pc >= v.range[0] && pc < v.range[1];
     return fn != null && v.function === fn;
   });
+}
+
+/**
+ * The address a variable's value is at right now. A stack- or frame-relative
+ * variable (`baseAddr` set) moves as the program calls functions, so the
+ * pointer has to be read at every stop instead of being baked into the var.
+ */
+export function sourceVariableAddress(v: SourceVariable, read: (addr: number) => number): number | null {
+  if (v.addr == null) return null;
+  if (v.baseAddr == null) return v.addr;
+  const addr = (read(v.baseAddr) & 0xff) | ((read(v.baseAddr + 1) & 0xff) << 8);
+  return addr + v.addr;
 }
 
 function isIntegerType(type: string): boolean {
@@ -104,11 +127,12 @@ function formatBytes(bytes: Uint8Array): string {
  * array or struct too big to show inline (the Debug Tree splits it into rows).
  */
 export function formatSourceValue(v: SourceVariable, read: (addr: number) => number): string | Uint8Array {
-  if (v.addr == null) return '<optimized out>';
+  const addr = sourceVariableAddress(v, read);
+  if (addr == null) return '<optimized out>';
   // big arrays are shown by their first rows; the tree can chunk the rest
   const size = Math.max(1, Math.min(v.size || 1, 1024));
   const bytes = new Uint8Array(size);
-  for (let i = 0; i < size; i++) bytes[i] = read(v.addr + i) & 0xff;
+  for (let i = 0; i < size; i++) bytes[i] = read(addr + i) & 0xff;
   const type = (v.type || '').trim();
   if (type === 'bool') return bytes[0] ? 'true' : 'false';
   if (isIntegerType(type)) {

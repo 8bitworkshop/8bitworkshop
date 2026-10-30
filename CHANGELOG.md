@@ -20,6 +20,8 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 
 - urust programs show their source variables while debugging. The compiler's `--debug-out` JSON already gives each variable's home and the `[from, to)` code range it is live over; the Debug Tree now has a **Locals** node with the values at the current PC (only the live definition is shown, and variables the optimizer kept no storage for say `<optimized out>`). Selecting a variable in the editor shows the same value, and `8bws run ... -e "tree Locals"` prints it from the CLI. The build's debug info now reaches the VS Code debugger too, so its Machine scope has the same node.
 
+- oscar64 C and C++ programs show their source variables too. The compiler's `-g` output includes a `.dbj` with function locals, their types, and the source lines where they are in scope; the build turns that into the same **Locals** node, mapping the scope lines to code ranges and reading stack/frame-relative variables through oscar64's zero-page pointers. Because the default `-O1` build usually keeps locals in registers, add `//#flag c -O0` to a program when you want to inspect them.
+
 ### Emulators
 
 - A urust program that panics reaches its `__trap_spin` stub and runs forever, which looks like a working program. The emulator now notices ten frames on that symbol, reads the trapping `jsr`/`call` site from the stack, stops with `Program trapped at $xxxx`, and points the editor's PC arrow at that source line. This covers the 6502/Z80 machine platforms (devel, NES, C64, VIC-20, ZX, ...) and the CLI.

@@ -1,9 +1,11 @@
 // Parser for the oscar64 compiler's auxiliary output files.
-// oscar64 writes a .map (memory map), .lbl (label file) and .asm
-// (assembly listing with C source line markers) next to the output.
+// oscar64 writes a .map (memory map), .lbl (label file), .asm (assembly
+// listing with C source line markers) and, with -g, a .dbj (source-level
+// debug JSON) next to the output.
 // This module is shared by the browser/WASM tool (src/worker/tools/oscar64.ts)
 // and the native server tool (src/worker/server/buildenv.ts).
 
+import { SourceVariable } from "../../common/sourcevars";
 import { CodeListingMap, Segment, SourceLine } from "../../common/workertypes";
 
 export interface Oscar64ParseResult {
@@ -145,4 +147,166 @@ export function parseOscar64Listing(asmout: string, asmfn: string) {
         }
     }
     return { srclines, asmlines };
+}
+
+// The .dbj is oscar64's source-level debug JSON (written by -g). Functions
+// carry code-address ranges for their source lines and variables with a type
+// id; a variable's home is either an absolute address or an offset from a
+// zero-page pointer (`base`), because locals can live on the frame or stack.
+// See "Complete debug information .dbj" in the oscar64 manual.
+export interface Oscar64Type {
+    name?: string;
+    typeid: number;
+    size: number;
+    type?: string;
+    eid?: number;
+    members?: { name: string, offset: number, typeid: number }[];
+}
+
+export interface Oscar64Reference {
+    source: string;
+    line: number;
+    column?: number;
+}
+
+export interface Oscar64Variable {
+    name: string;
+    start: number;
+    end: number;
+    base?: number;
+    enter?: number;
+    leave?: number;
+    typeid: number;
+    references?: Oscar64Reference[];
+}
+
+export interface Oscar64Function {
+    name: string;
+    start: number;
+    end: number;
+    source?: string;
+    line?: number;
+    lines?: { start: number, end: number, source: string, line: number }[];
+    variables?: Oscar64Variable[];
+}
+
+export interface Oscar64Debug {
+    variables?: Oscar64Variable[];
+    functions?: Oscar64Function[];
+    types?: Oscar64Type[];
+}
+
+function oscar64Basename(path: string): string {
+    return path.split(/[\\/]/).pop() || path;
+}
+
+function sameOscar64Source(a: string | undefined, b: string | undefined): boolean {
+    if (!a || !b) return true;
+    return a === b || oscar64Basename(a) === oscar64Basename(b);
+}
+
+function oscar64TypeName(type: Oscar64Type | undefined, types: Map<number, Oscar64Type>,
+    seen = new Set<number>()): string {
+    if (!type) return 'u8';
+    if (type.name) return type.name;
+    if (seen.has(type.typeid)) return type.type || 'u8';
+    seen.add(type.typeid);
+    switch (type.type) {
+        case 'uint': return 'u' + Math.max(8, type.size * 8);
+        case 'int': return 'i' + Math.max(8, type.size * 8);
+        case 'bool': return 'bool';
+        case 'float': return type.size === 8 ? 'f64' : 'f32';
+        case 'ptr':
+        case 'ref':
+            return '&' + oscar64TypeName(type.eid == null ? undefined : types.get(type.eid), types, seen);
+        case 'array': {
+            const elem = type.eid == null ? undefined : types.get(type.eid);
+            const count = elem && elem.size > 0 ? Math.floor(type.size / elem.size) : type.size;
+            return `[${oscar64TypeName(elem, types, seen)}; ${count}]`;
+        }
+        case 'struct': return 'struct';
+        case 'union': return 'union';
+        case 'enum': return 'enum';
+    }
+    return type.type || 'u8';
+}
+
+function mergeOscar64Ranges(ranges: [number, number][]): [number, number][] {
+    ranges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const merged: [number, number][] = [];
+    for (const r of ranges) {
+        if (r[1] <= r[0]) continue;
+        const last = merged[merged.length - 1];
+        if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
+        else merged.push([r[0], r[1]]);
+    }
+    return merged;
+}
+
+/** The code ranges where oscar64 says a local is visible. The compiler
+ *  records enter/leave source lines, not code addresses, so map those lines
+ *  through the function's line table. */
+function oscar64VariableRanges(fn: Oscar64Function, v: Oscar64Variable, source: string | undefined): [number, number][] | null {
+    if (v.enter == null || v.leave == null || !fn.lines) return null;
+    const enter = v.enter, leave = v.leave;
+    // Inlined helpers add their own source lines to the table; the variable's
+    // scope belongs to the function's source file, so ignore those.
+    const sameSource = fn.lines.filter(l => sameOscar64Source(l.source, source || fn.source));
+    const sourceLines = sameSource.length ? sameSource : fn.lines;
+    let minLine = Infinity, maxLine = -Infinity;
+    for (const l of sourceLines) {
+        if (l.line < minLine) minLine = l.line;
+        if (l.line > maxLine) maxLine = l.line;
+    }
+    // A variable declared before the first generated line and still visible on
+    // the last one lives in the frame for the whole function. Using the line
+    // ranges alone would lose it on branch tails and other instructions the
+    // compiler did not attribute to a source line.
+    if (minLine <= maxLine && enter <= minLine && leave >= maxLine) {
+        return [[fn.start, fn.end]];
+    }
+    const line = (l: { line: number, source: string }) =>
+        l.line >= enter && l.line <= leave && sameOscar64Source(l.source, source);
+    let lines = fn.lines.filter(line);
+    if (!lines.length) {
+        // the declaration may be in an included file whose path is spelled
+        // differently in the two tables; fall back to the line numbers alone
+        lines = fn.lines.filter(l => l.line >= enter && l.line <= leave);
+    }
+    const ranges = mergeOscar64Ranges(lines.map(l => [l.start, l.end] as [number, number]));
+    return ranges.length ? ranges : null;
+}
+
+/**
+ * Turn the .dbj into the source variables the Debug Tree shows. Only function
+ * locals and parameters are included: globals are live everywhere, but the
+ * Locals node is about the frame a stop is in.
+ */
+export function parseOscar64Dbj(dbjout: string): { sourceVariables: SourceVariable[] } {
+    const dbj = JSON.parse(dbjout) as Oscar64Debug;
+    const types = new Map<number, Oscar64Type>();
+    for (const t of dbj.types || []) types.set(t.typeid, t);
+    const sourceVariables: SourceVariable[] = [];
+    for (const fn of dbj.functions || []) {
+        for (const v of fn.variables || []) {
+            const type = types.get(v.typeid);
+            const ref = v.references && v.references[0];
+            const file = ref && ref.source ? oscar64Basename(ref.source) :
+                fn.source ? oscar64Basename(fn.source) : null;
+            const ranges = oscar64VariableRanges(fn, v, ref && ref.source);
+            sourceVariables.push({
+                name: v.name,
+                type: oscar64TypeName(type, types),
+                size: type && type.size ? type.size : Math.max(0, v.end - v.start),
+                function: fn.name,
+                addr: v.start,
+                baseAddr: v.base ?? null,
+                ranges,
+                file,
+                line: ref ? ref.line : v.enter ?? null,
+                col: ref && ref.column != null ? ref.column : null,
+            });
+        }
+    }
+    return { sourceVariables };
 }

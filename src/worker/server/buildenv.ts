@@ -5,7 +5,7 @@ import { spawn } from 'child_process';
 import { CodeListing, CodeListingMap, Segment, WorkerBuildStep, WorkerErrorResult, WorkerFileUpdate, WorkerResult, isOutputResult } from '../../common/workertypes';
 import { getFilenamePrefix, getRootBasePlatform, replaceAll } from '../../common/util';
 import { parseObjDump } from './clang';
-import { parseOscar64Listing, parseOscar64Lbl, parseOscar64Map } from '../tools/oscar64parse';
+import { parseOscar64Dbj, parseOscar64Listing, parseOscar64Lbl, parseOscar64Map } from '../tools/oscar64parse';
 import { BuildStep } from '../builder';
 import { makeErrorMatcher } from '../listingutils';
 
@@ -156,6 +156,13 @@ async function oscar64ProcessOutput(step: WorkerBuildStep, outpath: string): Pro
             asmlines: asmlines,
             text: txt,
         };
+    }
+    // parse .dbj for source-level variables
+    try {
+        let txt = await fs.promises.readFile(prefix_path + '.dbj', { encoding: 'utf-8' });
+        debuginfo = parseOscar64Dbj(txt);
+    } catch (e) {
+        // -g writes it, but an old toolchain or a failed compile may not
     }
     return { output, listings, symbolmap, symbolsizes, segments, debuginfo };
 }

@@ -2,7 +2,7 @@ import { WASIFilesystem, WASIRunner } from "../../common/wasi/wasishim";
 import { defineArgs, extraArgsFor } from "../../common/toolmeta";
 import { BuildStep, BuildStepResult, gatherFiles, staleFiles, store, putWorkFile } from "../builder";
 import { makeErrorMatcher } from "../listingutils";
-import { parseOscar64Listing, parseOscar64Lbl, parseOscar64Map } from "./oscar64parse";
+import { parseOscar64Dbj, parseOscar64Listing, parseOscar64Lbl, parseOscar64Map } from "./oscar64parse";
 import { loadWASIFilesystemZip } from "../wasiutils";
 import { loadWASMBinary } from "../wasmutils";
 
@@ -94,6 +94,7 @@ export async function compileOscar64(step: BuildStep): Promise<BuildStepResult> 
         // banked targets (NES) emit a Mesen label file (.mlb) instead of a VICE .lbl
         let mlbout = getWasiFileAsString(wasi, prefix + ".mlb") || getWasiFileAsString(wasi, ".mlb");
         let asmout = getWasiFileAsString(wasi, prefix + ".asm") || getWasiFileAsString(wasi, ".asm");
+        let dbjout = getWasiFileAsString(wasi, prefix + ".dbj") || getWasiFileAsString(wasi, ".dbj");
         let segments = [];
         let symbolmap = {};
         let symbolsizes = {};
@@ -123,6 +124,17 @@ export async function compileOscar64(step: BuildStep): Promise<BuildStepResult> 
                 text: asmout,
             };
         }
+        let debuginfo = {};
+        if (dbjout) {
+            putWorkFile(prefix + ".dbj", dbjout);
+            try {
+                debuginfo = parseOscar64Dbj(dbjout);
+            } catch (e) {
+                // the ROM and listing are still usable if the debug JSON is
+                // malformed; don't turn a successful build into a failure
+                console.log('could not parse oscar64 debug info', e);
+            }
+        }
         return {
             output,
             errors,
@@ -130,6 +142,7 @@ export async function compileOscar64(step: BuildStep): Promise<BuildStepResult> 
             symbolmap,
             symbolsizes,
             segments,
+            debuginfo,
         };
     }
 }

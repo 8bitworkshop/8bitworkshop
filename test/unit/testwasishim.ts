@@ -2,7 +2,7 @@ import assert from "assert";
 import { WASIRunner, WASIMemoryFilesystem, WASIErrors, FDOpenFlags, normalizeWASIPath } from "../../src/common/wasi/wasishim";
 import * as fs from "fs";
 import { loadWASIFilesystemZip, unzipWASIFilesystem } from "../../src/worker/wasiutils";
-import { parseOscar64Listing, parseOscar64Lbl, parseOscar64Map } from "../../src/worker/tools/oscar64parse";
+import { parseOscar64Dbj, parseOscar64Listing, parseOscar64Lbl, parseOscar64Map } from "../../src/worker/tools/oscar64parse";
 
 async function loadWASM(filename: string) {
     const wasmdata = fs.readFileSync(`./src/worker/wasm/${filename}.wasm`);
@@ -128,10 +128,10 @@ describe('test WASI oscar64', function () {
         const zipdata = fs.readFileSync(`./src/worker/fs/oscar64-fs.zip`);
         let oscar64_fs = await unzipWASIFilesystem(zipdata, "./");
         shim.fs.setParent(oscar64_fs);
-        shim.fs.putFile("./main.c", `#include <stdio.h>\nint main() { printf("FOO"); return 0; }`);
+        shim.fs.putFile("./main.c", `#include <stdio.h>\nint main() { unsigned char x = 42; printf("FOO%d", x); return 0; }`);
         shim.addPreopenDirectory("include");
         shim.addPreopenDirectory(".");
-        shim.setArgs(["oscar64", '-v', '-gp', '-ii=include', '-o=./foo.prg', 'main.c']);
+        shim.setArgs(["oscar64", '-v', '-O0', '-gp', '-ii=include', '-o=./foo.prg', 'main.c']);
         let errno = shim.run();
         const stdout = shim.fds[1].getBytesAsString();
         const stderr = shim.fds[2].getBytesAsString();
@@ -142,6 +142,7 @@ describe('test WASI oscar64', function () {
         assert.ok(shim.fs.getFile("./foo.map"), "foo.map not written");
         assert.ok(shim.fs.getFile("./foo.lbl"), "foo.lbl not written");
         assert.ok(shim.fs.getFile("./foo.asm"), "foo.asm not written");
+        assert.ok(shim.fs.getFile("./foo.dbj"), "foo.dbj not written");
         // parse the map file for segments and symbols
         let mapout = shim.fs.getFile("./foo.map").getBytesAsString();
         let parsed = parseOscar64Map(mapout);
@@ -157,6 +158,10 @@ describe('test WASI oscar64', function () {
         assert.ok(listing.asmlines.length > 0);
         assert.ok(listing.srclines.length > 0);
         assert.ok(listing.srclines[0].offset > 0);
+        // parse the source-level debug JSON
+        let dbjout = shim.fs.getFile("./foo.dbj").getBytesAsString();
+        let dbj = parseOscar64Dbj(dbjout);
+        assert.ok(dbj.sourceVariables.some(v => v.name == 'x'), JSON.stringify(dbj.sourceVariables));
     });
 });
 

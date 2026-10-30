@@ -424,7 +424,7 @@ export abstract class BaseDebugPlatform extends BasePlatform {
   }
 
   /** The source variables live at the current PC, from the build's debug
-   *  info (urust), keyed `name:type`; empty when there are none. */
+   *  info (urust, oscar64), keyed `name:type`; empty when there are none. */
   getSourceVariables(): { [name: string]: any } {
     const vars = sourceVariablesOf(this.debugSymbols?.debuginfo);
     if (!vars.length) return {};
