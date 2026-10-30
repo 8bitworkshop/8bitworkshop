@@ -70,5 +70,6 @@ export function compileUrust(step: BuildStep): BuildStepResult {
         symbolmap: dbg.symbolmap,
         symbolsizes: dbg.symbolsizes,
         segments: dbg.segments,
+        debuginfo: dbg.debuginfo,
     } as BuildStepResult;
 }

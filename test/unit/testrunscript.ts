@@ -86,4 +86,10 @@ describe('RunScript time travel', function () {
     assert.match(output(), /MISSED/);
     assert.strictEqual(formatTimestamp(t.now()), '5:0');
   });
+
+  it('lists debug tree entries', async function () {
+    const { script, output } = await open();
+    script.run('tree');
+    assert.match(output(), /^state\/$/m);
+  });
 });

@@ -107,6 +107,9 @@ describe('urust tool', function () {
       { name: 'ROM', start: 0x8000, size: 20, bank: null, type: 'rom' },
       { name: 'RAM', start: 0, size: 0x800, bank: null, type: 'ram' },
     ],
+    variables: [
+      { name: 'score', type: 'u16', size: 2, function: 'main', addr: 0x10, range: [0x8000, 0x8014], codeBank: null, file: 'main.rs', line: 1, col: 1 },
+    ],
   };
 
   it('converts debug info for the debugger and memory map', function () {
@@ -118,6 +121,8 @@ describe('urust tool', function () {
     assert.deepStrictEqual(r.symbolsizes, { main: 20, score: 2 });
     assert.strictEqual(r.segments[1].type, 'ram');
     assert.strictEqual(r.banked, false);
+    assert.deepStrictEqual(r.variables, dbg.variables);
+    assert.deepStrictEqual(r.debuginfo.sourceVariables, dbg.variables);
   });
 
   it('flags banked output', function () {

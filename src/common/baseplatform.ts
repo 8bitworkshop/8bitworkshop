@@ -17,6 +17,7 @@ import { _MOS6502 } from "./cpu/MOS6502";
 import { AcceptsBIOS, AcceptsJoyInput, AcceptsKeyInput, AcceptsPaddleInput, AcceptsROM, Bus, FrameBased, HasCPU, HasSerialIO, Probeable, RasterFrameBased, Resettable, SampledAudioSource, SavesInputState, SavesState, SerialIOInterface, VideoSource } from "./devices";
 import { ProbeRecorder } from "./probe";
 import { BaseWASMMachine } from "./wasmplatform";
+import { formatSourceVariableLine, liveSourceVariables, readSourceByte, sourceVariablesOf, sourceVariableTree } from "./sourcevars";
 
 ///
 
@@ -254,7 +255,13 @@ export abstract class BasePlatform {
   getDebugTree(): {} {
     var o: any = {};
     o.state = this.saveState();
-    if (this.debugSymbols?.debuginfo) o.debuginfo = this.debugSymbols.debuginfo;
+    if (this.debugSymbols?.debuginfo) {
+      // source variables have their own live view; listing the raw records
+      // here would only show where they are, not what they hold
+      const info = { ...this.debugSymbols.debuginfo };
+      delete info['sourceVariables'];
+      if (Object.keys(info).length) o.debuginfo = info;
+    }
     return o;
   }
   readFile(path: string): FileData {
@@ -408,6 +415,40 @@ export abstract class BaseDebugPlatform extends BasePlatform {
   abstract getSP(): number;
   abstract getPC(): number;
   abstract isStable(): boolean;
+
+  /** The PC a stop is at, including a banked effective PC where a platform
+   *  reports one in EPC. */
+  private debugPC(): number {
+    const c = this.getCPUState();
+    return c && c.EPC != null ? c.EPC : (c ? c.PC : this.getPC());
+  }
+
+  /** The source variables live at the current PC, from the build's debug
+   *  info (urust), keyed `name:type`; empty when there are none. */
+  getSourceVariables(): { [name: string]: any } {
+    const vars = sourceVariablesOf(this.debugSymbols?.debuginfo);
+    if (!vars.length) return {};
+    return sourceVariableTree(vars, this.debugPC(), this.debugSymbols.symbolmap,
+      this.debugSymbols.symbolsizes, a => readSourceByte(this, a)) || {};
+  }
+
+  getDebugTree(): {} {
+    const tree: any = super.getDebugTree();
+    if (sourceVariablesOf(this.debugSymbols?.debuginfo).length) {
+      tree.Locals = { $$: () => this.getSourceVariables() };
+    }
+    return tree;
+  }
+
+  inspect(sym: string): string {
+    const vars = sourceVariablesOf(this.debugSymbols?.debuginfo);
+    if (vars.length) {
+      const v = liveSourceVariables(vars, this.debugPC(), this.debugSymbols.symbolmap,
+        this.debugSymbols.symbolsizes).find(v => v.name === sym);
+      if (v) return formatSourceVariableLine(v, a => readSourceByte(this, a));
+    }
+    return super.inspect(sym);
+  }
 
   /**
    * The site of a trap the CPU is sitting on, read from the return address a

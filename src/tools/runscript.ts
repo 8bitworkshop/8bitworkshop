@@ -51,6 +51,7 @@ export const RUN_SCRIPT_HELP = [
   '  pc [N]                      - print PC + disassembly of N instructions',
   '  analyze                     - run the CPU timing analyzer from the reset vector',
   '  info                        - platform/machine debug info',
+  '  tree [PATH]                 - debug tree entries under PATH (nodes separated by dots)',
   '  paddle X Y [BUTTONS]        - move the paddle to X,Y (0-255); BUTTONS is a list of 0/1, like 1 0 0',
   '  signals [PATH]              - HDL signals under PATH (modules separated by dots; default the top)',
   '  vcd FILE [MAXMB] | vcd off  - record every clock\'s signal changes to a VCD file; .gz compresses; stops at MAXMB (default 1024, 0 = no limit); 8bws only',
@@ -574,6 +575,17 @@ export class RunScript {
     for (const e of treeChildren(root, path)) this.out(`${e.name}${e.expandable ? '/' : ''} ${e.value}\n`);
   }
 
+  cmdTree(tokens: string[]) {
+    this.target.settle();
+    const root = this.target.getDebugTree();
+    if (!root) throw new Error(`'${this.target.id}' has no debug tree`);
+    const path = tokens[1] ? tokens[1].split('.') : [];
+    for (const e of treeChildren(root, path)) {
+      const name = e.name + (e.expandable ? '/' : '');
+      this.out(`${name}${e.value ? ' ' + e.value : ''}\n`);
+    }
+  }
+
   cmdPNG(tokens: string[]) {
     if (!tokens[1]) throw new Error('usage: png FILE');
     if (!this.writeFrame) throw new Error("'png' is not available here");
@@ -651,6 +663,7 @@ const COMMANDS: { [name: string]: Command } = {
   'pc': RunScript.prototype.cmdPC,
   'analyze': RunScript.prototype.cmdAnalyze,
   'info': RunScript.prototype.cmdInfo,
+  'tree': RunScript.prototype.cmdTree,
   'signals': RunScript.prototype.cmdSignals,
   'png': RunScript.prototype.cmdPNG,
   'capture': RunScript.prototype.cmdCapture,

@@ -6,6 +6,7 @@
 // (continue, step) only set a goal; the host's loop calls advance() to work
 // toward it, a few frames at a time, so it can still take a pause request.
 
+import { DebugSymbols } from '../common/baseplatform';
 import { Breakpoint, makeCondContext } from '../common/breakpoints';
 import { compileExpression } from '../common/breakcond';
 import { TreeEntry, treeChildren } from '../common/debugtree';
@@ -98,9 +99,11 @@ export class DebugService {
     this.script = new RunScript(target, s => { this.scriptOut += s; }, this.debug);
   }
 
-  /** A new build: its listings and symbols. */
+  /** A new build: its listings, symbols and debug info. */
   setBuild(build: BuildInfo) {
     this.script.setDebugContext(buildDebugContext(build));
+    // the platform's debug tree reads symbols and source variables from here
+    this.target.platform.debugSymbols = new DebugSymbols(build.symbolmap || {}, build.debuginfo || {}, build.symbolsizes);
   }
 
   capabilities(): DebugCapabilities {

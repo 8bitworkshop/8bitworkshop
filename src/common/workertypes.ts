@@ -237,11 +237,11 @@ export interface WorkerOutputResult<T> {
  * Types that carry a build's products extend this, and `buildProducts` copies
  * them, so a new field is added here and in that function only.
  */
-export type BuildProducts = Pick<WorkerOutputResult<unknown>, 'listings' | 'symbolmap' | 'symbolsizes' | 'segments'>;
+export type BuildProducts = Pick<WorkerOutputResult<unknown>, 'listings' | 'symbolmap' | 'symbolsizes' | 'segments' | 'debuginfo'>;
 
 export function buildProducts(r: BuildProducts): BuildProducts {
-  const { listings, symbolmap, symbolsizes, segments } = r;
-  return { listings, symbolmap, symbolsizes, segments };
+  const { listings, symbolmap, symbolsizes, segments, debuginfo } = r;
+  return { listings, symbolmap, symbolsizes, segments, debuginfo };
 }
 
 export function isUnchanged(result: WorkerResult) : result is WorkerUnchangedResult {

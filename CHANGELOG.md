@@ -16,6 +16,10 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 - The WASM builds of the compilers no longer take the host down with them. Their Emscripten runtime aborts the process on an unhandled rejection and rethrows uncaught exceptions, which node turns into exit code 7 with no message. The `8bws` CLI and the VS Code extension ignore those handlers now, so a stray error is reported instead of killing the process.
 - Rust programs build with urust on every platform it supports. The ZX Spectrum now maps to urust's `zx-spectrum` target instead of an unknown `zx`, and `rs8::apple2`, `rs8::vic20` and `rs8::zx` link to their module sources like the other register modules. Platform detection recognizes an `rs8::` module in a `.rs` file, so an existing urust program opens without `--platform`.
 
+### Debugging
+
+- urust programs show their source variables while debugging. The compiler's `--debug-out` JSON already gives each variable's home and the `[from, to)` code range it is live over; the Debug Tree now has a **Locals** node with the values at the current PC (only the live definition is shown, and variables the optimizer kept no storage for say `<optimized out>`). Selecting a variable in the editor shows the same value, and `8bws run ... -e "tree Locals"` prints it from the CLI. The build's debug info now reaches the VS Code debugger too, so its Machine scope has the same node.
+
 ### Emulators
 
 - A urust program that panics reaches its `__trap_spin` stub and runs forever, which looks like a working program. The emulator now notices ten frames on that symbol, reads the trapping `jsr`/`call` site from the stack, stops with `Program trapped at $xxxx`, and points the editor's PC arrow at that source line. This covers the 6502/Z80 machine platforms (devel, NES, C64, VIC-20, ZX, ...) and the CLI.

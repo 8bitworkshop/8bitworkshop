@@ -3,6 +3,7 @@
 // (src/worker/tools/urust.ts); kept free of worker imports so tests can use it.
 
 import { CodeListingMap, Segment, SourceLine, WorkerError } from "../../common/workertypes";
+import { SourceVariable } from "../../common/sourcevars";
 import { urustPlatformName } from "../../common/toolmeta";
 
 export { urustPlatformName };
@@ -24,6 +25,7 @@ export interface UrustDebug {
     symbols: { name: string, addr: number, size: number, kind: 'code' | 'data' | 'register', bank: number | null, ram: boolean }[];
     lines: { addr: number, size: number, bank: number | null, file: string, line: number, col: number, endLine: number, endCol: number, func: string | null }[];
     segments: { name: string, start: number, size: number, bank: number | null, type: 'rom' | 'ram' }[];
+    variables?: SourceVariable[];
 }
 
 export interface UrustDebugResult {
@@ -31,6 +33,10 @@ export interface UrustDebugResult {
     symbolmap: { [sym: string]: number };
     symbolsizes: { [sym: string]: number };
     segments: Segment[];
+    /** source variables and the code ranges they are live over */
+    variables: SourceVariable[];
+    /** extra info for DebugSymbols.debuginfo (the debug tree reads it) */
+    debuginfo: { sourceVariables: SourceVariable[] };
     /** true if anything lives in a switchable bank: addresses there are
      *  ambiguous to the debugger, which has no bank in its line/symbol tables */
     banked: boolean;
@@ -103,6 +109,7 @@ export function urustDebugToResult(dbg: UrustDebug, paths: string[]): UrustDebug
         source: 'native' as const,
     }));
     if (dbg.segments.some(g => g.bank != null)) banked = true;
-    return { listings, symbolmap, symbolsizes, segments, banked };
+    const variables = dbg.variables || [];
+    return { listings, symbolmap, symbolsizes, segments, variables, debuginfo: { sourceVariables: variables }, banked };
 }
 
