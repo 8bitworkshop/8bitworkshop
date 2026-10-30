@@ -78,6 +78,12 @@ describe('Memory map layout', function () {
     ]);
   });
 
+  it('hides single-underscore segment bounds', function () {
+    const symbols = { s_BSS: 0x300, l_BSS: 0x100, _buffer: 0x300 };
+    const vars = findLargeVariables(symbols, native.concat(linker), {minVarSize:16});
+    assert.deepEqual(vars.map(v => v.name), ['_buffer']);
+  });
+
   it('skips the last symbol of a native-only RAM segment', function () {
     const vars = findLargeVariables({ _a: 0x100, _b: 0x200 }, native, {minVarSize:16});
     assert.deepEqual(vars.map(v => v.name), ['_a']);

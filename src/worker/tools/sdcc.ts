@@ -123,10 +123,33 @@ export function objectsDefineArea(objfiles: string[], area: string): boolean {
 }
 
 /**
- * Convert Intel HEX to a ROM image of rom_size bytes. With banking, records
- * above 64 KB are placed by bank, and the image grows to the next power of 2
- * that holds the highest bank.
+ * Builds the segment map from the linker's area bounds. SDCC names each area
+ * with an `s_` and an `l_` symbol; the area name after the prefix may itself
+ * start with an underscore (`_CODE` on z80, `CODE` on mos6502), so both
+ * `s__CODE`/`l__CODE` and `s_CODE`/`l_CODE` have to pair up.
  */
+export function parseSymbolSegments(symbolmap: { [sym: string]: number }) {
+    const segments = [];
+    // TODO: use stack params for stack segment
+    for (const ident in symbolmap) {
+        const m = /^s_(.+)$/.exec(ident);
+        if (!m) continue;
+        const area = m[1];
+        // an area whose name begins with _ is shown without it, as before
+        const seg = area.replace(/^_/, '');
+        const segstart = symbolmap[ident];
+        const segsize = symbolmap['l_' + area];
+        if (!(segstart >= 0 && segsize > 0)) continue;
+        let type = null;
+        if (['INITIALIZER', 'GSINIT', 'GSFINAL'].includes(seg)) type = 'rom';
+        else if (seg.startsWith('CODE')) type = 'rom';
+        else if (['DATA', 'INITIALIZED'].includes(seg)) type = 'ram';
+        if (type == 'rom' || segstart > 0) // ignore HEADER0, CABS0, etc (TODO?)
+            segments.push({ name: seg, start: segstart, size: segsize, type });
+    }
+    return segments;
+}
+
 /**
  * Guesses each symbol's size as the distance to the next symbol in its
  * segment (the last one runs to the segment's end). The linker map only has
@@ -140,8 +163,8 @@ export function objectsDefineArea(objfiles: string[], area: string): boolean {
  * Symbols outside every segment get no size.
  */
 export function inferSymbolSizes(symbolmap: { [sym: string]: number }, segments: { start: number, size: number }[]) {
-    // s__SEG / l__SEG are segment bounds, and the linker's '$' names are debug labels
-    const names = Object.keys(symbolmap).filter(n => !/^[sl]__/.test(n) && !n.includes('$'));
+    // s_SEG / l_SEG are segment bounds, and the linker's '$' names are debug labels
+    const names = Object.keys(symbolmap).filter(n => !/^[sl]_/.test(n) && !n.includes('$'));
     const sizes: { [sym: string]: number } = {};
     for (const seg of segments) {
         const end = seg.start + seg.size;
@@ -165,13 +188,20 @@ export function inferSymbolSizes(symbolmap: { [sym: string]: number }, segments:
  */
 export function moduleRanges(objs: { name: string, rel: string }[], segments: { name: string, start: number, size: number }[]) {
     const out: { [seg: string]: { name: string, start: number, size: number }[] } = {};
+    // the z80 linker writes an area as _CODE, the mos6502 one as CODE; try
+    // the plain name first so a real CODE area wins over an empty _CODE
+    const areaSize = (rel: string, name: string) => {
+        for (const area of [name, '_' + name]) {
+            const m = new RegExp(`^A ${area.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} size ([0-9A-Fa-f]+) `, 'm').exec(rel);
+            if (m) return parseInt(m[1], 16);
+        }
+        return 0;
+    };
     for (const seg of segments) {
-        const re = new RegExp(`^A _${seg.name} size ([0-9A-Fa-f]+) `, 'm');
         let cur = seg.start;
         const mods = [];
         for (const obj of objs) {
-            const m = re.exec(obj.rel);
-            const size = m ? parseInt(m[1], 16) : 0;
+            const size = areaSize(obj.rel, seg.name);
             if (size > 0) mods.push({ name: obj.name, start: cur, size });
             cur += size;
         }
@@ -183,6 +213,11 @@ export function moduleRanges(objs: { name: string, rel: string }[], segments: { 
     return out;
 }
 
+/**
+ * Convert Intel HEX to a ROM image of rom_size bytes. With banking, records
+ * above 64 KB are placed by bank, and the image grows to the next power of 2
+ * that holds the highest bank.
+ */
 export function parseIHX(ihx: string, rom_start: number, rom_size: number, errors: WorkerError[], banking?: ROMBanking) {
     var output = new Uint8Array(new ArrayBuffer(rom_size));
     var upper = 0; // from type 04 (extended linear address) records
@@ -529,25 +564,7 @@ async function linkSDLD(step: BuildStep, ld: 'sdldz80' | 'sdld6808') {
             }
         }
         // build segment map
-        var seg_re = /^s__(\w+)$/;
-        var segments = [];
-        // TODO: use stack params for stack segment
-        for (let ident in symbolmap) {
-            let m = seg_re.exec(ident);
-            if (m) {
-                let seg = m[1];
-                let segstart = symbolmap[ident]; // s__SEG
-                let segsize = symbolmap['l__' + seg]; // l__SEG
-                if (segstart >= 0 && segsize > 0) {
-                    var type = null;
-                    if (['INITIALIZER', 'GSINIT', 'GSFINAL'].includes(seg)) type = 'rom';
-                    else if (seg.startsWith('CODE')) type = 'rom';
-                    else if (['DATA', 'INITIALIZED'].includes(seg)) type = 'ram';
-                    if (type == 'rom' || segstart > 0) // ignore HEADER0, CABS0, etc (TODO?)
-                        segments.push({ name: seg, start: segstart, size: segsize, type: type });
-                }
-            }
-        }
+        var segments = parseSymbolSegments(symbolmap);
         // object files in link order, for the Memory Map's module column
         // (a library's own objects, like crt0, are stored as bytes)
         let objs = objargs.filter((fn) => fn.endsWith('.rel')).map((fn) => {

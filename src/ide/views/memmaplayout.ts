@@ -84,7 +84,7 @@ function toBlock(seg: Segment): MemMapBlock {
 }
 
 function isHiddenSymbol(name: string) {
-  return name.startsWith('__') || /^[sl]__/.test(name) || name.startsWith('.');
+  return name.startsWith('__') || /^[sl]_/.test(name) || name.startsWith('.');
 }
 
 // Find variables in RAM segments. Sizes come from symbolsizes when the
