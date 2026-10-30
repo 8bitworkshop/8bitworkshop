@@ -2,11 +2,11 @@ import { defaultKeymap, deleteLine, history, historyKeymap, isolateHistory, redo
 import { bracketMatching, foldGutter, indentOnInput, indentService, indentUnit } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap, openSearchPanel, findNext, selectNextOccurrence } from "@codemirror/search";
 import { Compartment, EditorState, Extension, StateEffect, StateField } from "@codemirror/state";
-import { crosshairCursor, drawSelection, dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, KeyBinding, rectangularSelection, ViewUpdate } from "@codemirror/view";
+import { crosshairCursor, Decoration, DecorationSet, drawSelection, dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, KeyBinding, rectangularSelection, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { CodeAnalyzer } from "../../common/analysis";
 import { ProbeFlags, ProbeRecorder } from "../../common/probe";
 import { getFilenameForPath, getFolderForPath, hex, rpad } from "../../common/util";
-import { getIncludeDirs, getIncludePatterns, getLinkPatterns, getSharedFileSystemName, getSystemIncludePatterns, getToolMetaForFilename } from "../../common/toolmeta";
+import { getIncludeDirs, getIncludePatterns, getLinkPatterns, getSharedFileSystemName, getSystemIncludePatterns, getToolMeta, getToolMetaForFilename } from "../../common/toolmeta";
 import { WorkerMessage } from "../../common/workertypes";
 import { SourceFile, SourceLocation, WorkerError } from "../../common/workertypes";
 import { parserRegistry, getLanguageSupportForStyle, getDefaultLanguageParser } from "../../parser/registry";
@@ -34,6 +34,7 @@ import { createTextTransformFilterEffect, textTransformFilterCompartment } from 
 import { breakpointMarkers, bytes, clock, currentPcMarker, errorMarkers, ErrorInfo, offset, statusMarkers } from "./gutter";
 import { currentPc, errorMessages, errorSpans, highlightLines, showValue, tracedLines } from "./visuals";
 import { computeHeatLevels } from "./traceheat";
+import { buildSourceLineMap, formatSourceComment, isSourceComment, SourceLineReader } from "./disasmsource";
 
 // look ahead this many bytes when finding source lines for a PC
 export const PC_LINE_LOOKAHEAD = 64;
@@ -787,6 +788,91 @@ export class SourceEditor implements ProjectView {
 
 const disasmWindow = 1024; // disassemble this many bytes around cursor
 
+// Assembly sources are already what the disassembly shows; interleaving them
+// would repeat every instruction. Compiled and interpreted sources (C, BASIC,
+// Rust, ...) are the ones whose lines are useful next to the disassembly.
+function isAssemblerSource(path: string): boolean {
+  const meta = getToolMeta(current_project.getToolForFilename(path));
+  return meta != null && meta.kind === 'assembler';
+}
+
+// Give the source lines interleaved into the disassembly their own color.
+// They are the only lines that start with "; file.c:12:", so a listing's or
+// instruction's comments on the same line stay the normal color.
+const disasmSourceDecoration = Decoration.line({ attributes: { class: "cm-disasm-source" } });
+
+function highlightDisasmSourceLines() {
+  function build(view: EditorView): DecorationSet {
+    const ranges: any[] = [];
+    for (const { from, to } of view.visibleRanges) {
+      let pos = from;
+      while (pos <= to) {
+        const line = view.state.doc.lineAt(pos);
+        if (isSourceComment(line.text)) ranges.push(disasmSourceDecoration.range(line.from));
+        pos = line.to + 1;
+      }
+    }
+    return Decoration.set(ranges, true);
+  }
+  return ViewPlugin.fromClass(class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = build(view);
+    }
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged) this.decorations = build(update.view);
+    }
+  }, {
+    decorations: v => v.decorations,
+  });
+}
+
+// Read source lines for the disassembly view. Source paths from a listing are
+// relative to the build (e.g. "main.c"), so resolve them against the project
+// files first. Caches both path lookups and file contents: one disassembly
+// refresh asks for the same file many times.
+function makeSourceLineReader(): SourceLineReader {
+  const pathCache = new Map<string, string | null>();
+  const textCache = new Map<string, string[] | null>();
+  const resolvePath = (path: string): string | null => {
+    if (pathCache.has(path)) return pathCache.get(path);
+    const candidates = [
+      path,
+      current_project.filename2path && current_project.filename2path[path],
+      current_project.stripLocalPath(path),
+    ];
+    let found: string | null = null;
+    for (const candidate of candidates) {
+      if (candidate && typeof current_project.getFile(candidate) === 'string') {
+        found = candidate;
+        break;
+      }
+    }
+    if (!found) {
+      // the compiler may name the file without its folder (e.g. "main.c");
+      // fall back to a project file with the same name
+      const want = getFilenameForPath(path);
+      current_project.iterateFiles((fn, data) => {
+        if (found || typeof data !== 'string') return;
+        if (getFilenameForPath(fn) === want) found = fn;
+      });
+    }
+    pathCache.set(path, found);
+    return found;
+  };
+  return (path: string, line: number): string | null => {
+    const resolved = resolvePath(path);
+    if (!resolved) return null;
+    let lines = textCache.get(resolved);
+    if (lines === undefined) {
+      const text = current_project.getFile(resolved);
+      lines = typeof text === 'string' ? text.split(/\r?\n/) : null;
+      textCache.set(resolved, lines);
+    }
+    return lines && line >= 1 && line <= lines.length ? lines[line - 1] : null;
+  };
+}
+
 export class DisassemblerView implements ProjectView {
   disasmview: EditorView;
 
@@ -814,6 +900,7 @@ export class DisassemblerView implements ProjectView {
         highlightSelectionMatches(),
         disassemblyTheme,
         cobalt,
+        highlightDisasmSourceLines(),
         currentPc.field,
         EditorState.tabSize.of(8),
         EditorState.readOnly.of(true),
@@ -828,7 +915,11 @@ export class DisassemblerView implements ProjectView {
     let pc = centerAddr !== undefined ? centerAddr : (state.c ? state.c.PC : 0);
     let curline = 0;
     let selline = 0;
+    let lastSource = '';
     let addr2symbol = (platform.debugSymbols && platform.debugSymbols.addr2symbol) || {};
+    const sourcelines = current_project
+      ? buildSourceLineMap(current_project.getListings(), makeSourceLineReader(), path => !isAssemblerSource(path))
+      : null;
     // TODO: not perfect disassembler
     let disassemble = (start, len) => {
       // TODO: use pc2visits
@@ -837,16 +928,17 @@ export class DisassemblerView implements ProjectView {
       while (ofs < len) {
         let a = (start + ofs) | 0;
         let disasm = platform.disassemble(a, platform.readAddress.bind(platform));
-        /* TODO: look thru all source files
-        let srclinenum = sourcefile && this.sourcefile.offset2line[a];
-        if (srclinenum) {
-          let srcline = getActiveEditor().getLine(srclinenum);
-          if (srcline && srcline.trim().length) {
-            s += "; " + srclinenum + ":\t" + srcline + "\n";
-            curline++;
+        if (sourcelines) {
+          const srcline = sourcelines.get(a);
+          if (srcline) {
+            const sourcekey = srcline.path + '\0' + srcline.line;
+            if (sourcekey !== lastSource) {
+              s += formatSourceComment(srcline) + "\n";
+              curline++;
+              lastSource = sourcekey;
+            }
           }
         }
-        */
         let bytes = "";
         let comment = "";
         for (let i = 0; i < disasm.nbytes; i++)

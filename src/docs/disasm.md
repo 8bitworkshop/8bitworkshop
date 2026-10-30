@@ -18,6 +18,21 @@ follows the PC as you step. Symbol names are substituted for addresses
 when a symbol map is available, so jumps and loads show labels instead
 of raw hex.
 
+When the build has source-line information for a high-level language
+(C, BASIC, Rust, ...), the source line for an instruction is shown above
+it as a comment in a different color:
+
+```
+; game.c:42: if (player.x > 0) {
+$0865  A2 08  LDX #$08
+```
+
+Assembly sources (ca65, DASM, ACME, ...) are not interleaved: their
+instructions are already the disassembly. Source text comes from the
+project file, so linked sources are shown with their own file name.
+Library code with no source in the project is disassembled without these
+comments.
+
 ## Navigating
 
 - **Go To Address** re-centers the window on an address or symbol and

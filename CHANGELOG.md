@@ -18,6 +18,8 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 
 ### Debugging
 
+- The Disassembly window interleaves the high-level source line (C, BASIC, Rust, ...) for each instruction it starts, as a `; file:line: text` comment in a distinct color. Assembly sources such as ca65, DASM and ACME are left alone, since their instructions are already the disassembly. Linked sources show their own file name; code with no source in the project (such as a library routine) is disassembled as before.
+
 - SDCC's mos6502 backend now reports its segment map and symbol sizes. It names each area `s_CODE`/`l_CODE`, while z80 builds use `s__CODE`/`l__CODE`; the parser only knew the latter, so C64 and other 6502 builds had no segments, no Module column and no symbol sizes.
 
 - urust programs show their source variables while debugging. The compiler's `--debug-out` JSON already gives each variable's home and the `[from, to)` code range it is live over; the Debug Tree now has a **Locals** node with the values at the current PC (only the live definition is shown, and variables the optimizer kept no storage for say `<optimized out>`). Selecting a variable in the editor shows the same value, and `8bws run ... -e "tree Locals"` prints it from the CLI. The build's debug info now reaches the VS Code debugger too, so its Machine scope has the same node.
