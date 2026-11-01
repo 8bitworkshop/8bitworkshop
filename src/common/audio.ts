@@ -2,24 +2,56 @@
 import { SampledAudioSink } from "./devices";
 
 // from TSS
-declare var MasterChannel, AudioLooper, PsgDeviceChannel;
+declare var MasterChannel, PsgDeviceChannel;
 
-export class MasterAudio {
+/** The start/stop controls shared by the IDE's audio outputs. */
+export interface AudioOutput {
+  start(): void;
+  stop(): void;
+}
+
+// MasterAudio drives a TSS MasterChannel. It used to let TSS's AudioLooper own
+// a second AudioContext and pull samples from it; now it is a pull source for
+// the same SampleAudio graph every other platform uses, so there is one Web
+// Audio setup to unlock, pause and mute.
+export class MasterAudio implements AudioOutput {
   master = new MasterChannel();
-  looper;
+  output: SampledAudio;
+  private masterRate = 0;
+
   start() {
-    if (!this.looper) {
-      this.looper = new AudioLooper(512);
-      this.looper.setChannel(this.master);
-      this.looper.activate();
-      // AudioLooper makes its own AudioContext and never resumes it
-      resumeAudioContext(this.looper.audioContext);
+    if (!this.output) {
+      this.output = new SampledAudio(44100);
+      this.output.setPullSource((samples) => this.pull(samples));
+    }
+    this.output.start();
+    this.syncSampleRate();
+  }
+
+  stop() {
+    this.output && this.output.stop();
+  }
+
+  private syncSampleRate() {
+    const rate = this.output && this.output.sampleRate;
+    if (rate && rate !== this.masterRate) {
+      this.masterRate = rate;
+      this.master.setSampleRate(rate);
     }
   }
-  stop() {
-    if (this.looper) {
-      this.looper.setChannel(null);
-      this.looper = null;
+
+  private pull(samples: Float32Array) {
+    this.syncSampleRate();
+    // MasterChannel produces interleaved stereo Int32 samples; AudioLooper
+    // took the left channel and divided by 32768, and so do we.
+    const length = samples.length * 2;
+    if (this.master.bufferLength !== length) {
+      this.master.setBufferLength(length);
+    }
+    this.master.generate(length);
+    const buffer = this.master.getBuffer();
+    for (let i = 0; i < samples.length; i++) {
+      samples[i] = buffer[i * 2] / 32768;
     }
   }
 }
@@ -485,6 +517,34 @@ export function resumeAudioContext(ctx: AudioContext) {
   for (const ev of audioUnlockEvents) document.addEventListener(ev, onGesture, true);
 }
 
+// Mute is global: a platform can have more than one output (apple2's speaker
+// and Mockingboard, or two SampleAudio instances across a restart), and the
+// button should silence all of them. Every Web Audio graph registers its gain
+// node here as it is created, and new graphs pick up the current state.
+let audioMuted = false;
+const audioMuteGains = new Set<{ gain: { value: number } }>();
+const audioMuteListeners = new Set<() => void>();
+
+/** True when the IDE's audio output is muted. */
+export function isAudioMuted(): boolean {
+  return audioMuted;
+}
+
+/** Mute or unmute every audio output. */
+export function setAudioMuted(muted: boolean) {
+  muted = !!muted;
+  if (muted === audioMuted) return;
+  audioMuted = muted;
+  for (const node of audioMuteGains) node.gain.value = muted ? 0 : 1;
+  for (const listener of Array.from(audioMuteListeners)) listener();
+}
+
+/** Subscribe to mute changes. Returns an unsubscribe function. */
+export function onAudioMuteChange(listener: () => void): () => void {
+  audioMuteListeners.add(listener);
+  return () => { audioMuteListeners.delete(listener); };
+}
+
 export var SampleAudio = function(clockfreq) {
   var self = this;
   var sfrac, sinc, accum;
@@ -580,11 +640,27 @@ export var SampleAudio = function(clockfreq) {
     // compressor for a bit of volume boost, helps with multich tunes
     self.compressorNode=self.context.createDynamicsCompressor();
 
+    // a single gain node the mute button controls (see setAudioMuted)
+    self.gainNode=self.context.createGain();
+    self.gainNode.gain.value = audioMuted ? 0 : 1;
+    audioMuteGains.add(self.gainNode);
+
     // patch up some cables :)
     self.mixerNode.connect(self.filterNode);
     self.filterNode.connect(self.compressorNode);
-    self.compressorNode.connect(self.context.destination);
+    self.compressorNode.connect(self.gainNode);
+    self.gainNode.connect(self.context.destination);
   }
+
+  /**
+   * Pull samples from a source instead of waiting for feedSample().
+   * The ScriptProcessor callback fills `samples` on demand; MasterAudio uses
+   * this to drive a TSS MasterChannel through the same graph as every other
+   * platform.
+   */
+  this.setPullSource = function(source: (samples: Float32Array) => void) {
+    self.callback = source;
+  };
 
   this.start = function() {
     if (self.stream) return;   // streaming already; start() is called again on resume
@@ -645,6 +721,10 @@ export var SampleAudio = function(clockfreq) {
   }
 
   this.close = function() {
+    if (self.gainNode) {
+      audioMuteGains.delete(self.gainNode);
+      self.gainNode = null;
+    }
     if (this.context) {
       this.context.close();
       this.context = null;
@@ -749,13 +829,20 @@ export var SampleAudio = function(clockfreq) {
 }
 
 
-export class SampledAudio {
+export class SampledAudio implements AudioOutput {
   sa;
   constructor(sampleRate : number) {
     this.sa = new SampleAudio(sampleRate);
   }
   feedSample(value:number, count:number) {
     this.sa.feedSample(value, count);
+  }
+  /**
+   * Fill samples from a source on demand instead of calling feedSample().
+   * Used by MasterAudio to drive TSS's pull-based MasterChannel.
+   */
+  setPullSource(source: (samples: Float32Array) => void) {
+    this.sa.setPullSource(source);
   }
   start() {
     this.sa.start();

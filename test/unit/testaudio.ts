@@ -1,6 +1,10 @@
 import assert from "assert";
 import { describe, it, afterEach } from "mocha";
-import { AUDIO_CHUNK_SAMPLES, AudioStream, SampledAudio, isAudioBlocked, onAudioStateChange, resumeAudioContext, setAudioStreamFactory } from "../../src/common/audio";
+import { AUDIO_CHUNK_SAMPLES, AudioStream, MasterAudio, SampledAudio, isAudioBlocked, isAudioMuted, onAudioMuteChange, onAudioStateChange, resumeAudioContext, setAudioMuted, setAudioStreamFactory } from "../../src/common/audio";
+
+afterEach(function () {
+  setAudioMuted(false);
+});
 
 // A stand-in for the extension's worker-side stream (see extension/emuworker.ts).
 class TestStream implements AudioStream {
@@ -16,6 +20,7 @@ class TestStream implements AudioStream {
 describe('SampleAudio streaming', function () {
   afterEach(function () {
     setAudioStreamFactory(null);
+    setAudioMuted(false);
   });
 
   it('hands full buffer chunks to the stream at the source rate', function () {
@@ -85,6 +90,7 @@ class FakeAudioContext {
   constructor() { FakeAudioContext.last = this; }
   createBiquadFilter() { return new FakeNode(); }
   createDynamicsCompressor() { return new FakeNode(); }
+  createGain() { return new FakeNode(); }
   createScriptProcessor(_len: number, _in: number, _out: number) { return this.scriptProcessor; }
   resume() { return Promise.resolve(); }
   suspend() { return Promise.resolve(); }
@@ -189,6 +195,83 @@ describe('SampleAudio autoplay unlock', function () {
     assert.equal(isAudioBlocked(), false);
     await ctx.suspend();
     assert.equal(isAudioBlocked(), false);
+  });
+});
+
+describe('audio mute', function () {
+  it('mutes every graph, including ones created after muting', function () {
+    withFakeAudio(() => {
+      const first = new SampledAudio(44100);
+      first.start();
+      const second = new SampledAudio(44100);
+      second.start();
+      const firstGain = (first.sa as any).gainNode;
+      const secondGain = (second.sa as any).gainNode;
+      assert.equal(firstGain.gain.value, 1);
+      assert.equal(secondGain.gain.value, 1);
+
+      let changes = 0;
+      const unsubscribe = onAudioMuteChange(() => changes++);
+      setAudioMuted(true);
+      assert.equal(isAudioMuted(), true);
+      assert.equal(firstGain.gain.value, 0);
+      assert.equal(secondGain.gain.value, 0);
+      assert.equal(changes, 1);
+
+      const later = new SampledAudio(44100);
+      later.start();
+      assert.equal((later.sa as any).gainNode.gain.value, 0);
+
+      setAudioMuted(false);
+      assert.equal(firstGain.gain.value, 1);
+      assert.equal(secondGain.gain.value, 1);
+      assert.equal((later.sa as any).gainNode.gain.value, 1);
+      unsubscribe();
+    });
+  });
+});
+
+// MasterAudio used to let TSS's AudioLooper own a second AudioContext. It now
+// pulls its MasterChannel through the same SampleAudio graph, so this checks
+// the pull path, the shared more-than-one-output mute and the rate handshake.
+class FakeMasterChannel {
+  sampleRate = 44100;
+  bufferLength = 0;
+  buffer: Int32Array;
+  setSampleRate(rate: number) { this.sampleRate = rate; }
+  setBufferLength(length: number) { this.bufferLength = length; this.buffer = new Int32Array(length); }
+  generate(length: number) { this.buffer.fill(8192); }
+  getBuffer() { return this.buffer; }
+}
+
+function withFakeTss(fn: () => void) {
+  const prev = (global as any).MasterChannel;
+  (global as any).MasterChannel = FakeMasterChannel;
+  try {
+    return fn();
+  } finally {
+    (global as any).MasterChannel = prev;
+  }
+}
+
+describe('MasterAudio', function () {
+  it('pulls TSS samples through SampleAudio and keeps one graph across resumes', function () {
+    withFakeAudio(() => withFakeTss(() => {
+      const audio = new MasterAudio();
+      audio.start();
+      const ctx = FakeAudioContext.last;
+      const master = (audio as any).master as FakeMasterChannel;
+      assert.equal(master.sampleRate, ctx.sampleRate);
+
+      const out = pullBlock(1024);
+      assert.equal(master.bufferLength, 2048);
+      assert.equal(out[0], 0.25); // 8192 / 32768, as AudioLooper did
+      assert.equal(out[1023], 0.25);
+
+      audio.stop();
+      audio.start();
+      assert.equal(FakeAudioContext.last, ctx, 'resume must not create a second AudioContext');
+    }));
   });
 });
 

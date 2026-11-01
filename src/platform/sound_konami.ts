@@ -2,10 +2,10 @@
 import { Platform, BaseZ80Platform  } from "../common/baseplatform";
 import { PLATFORMS, RAM, newAddressDecoder, padBytes, noise, setKeyboardFromMap, AnimationTimer, RasterVideo, Keys, makeKeycodeMap } from "../common/emu";
 import { hex } from "../common/util";
-import { resumeAudioContext } from "../common/audio";
+import { MasterAudio } from "../common/audio";
 
 // from TSS
-declare var MasterChannel, AudioLooper, PsgDeviceChannel;
+declare var PsgDeviceChannel;
 
 var KONAMISOUND_PRESETS = [
 ];
@@ -14,7 +14,7 @@ var KonamiSoundPlatform = function(mainElement) {
   this.__proto__ = new (BaseZ80Platform as any)();
 
   var cpu, ram, rom, membus, iobus;
-  var audio, master;
+  var audio;
   var video, timer;
   var interruptPending = 0;
   var psgRegister = 0;
@@ -66,13 +66,10 @@ var KonamiSoundPlatform = function(mainElement) {
     this.readAddress = membus.read;
     cpu = this.newCPU(membus, iobus);
     psg = new PsgDeviceChannel();
-    master = new MasterChannel();
     psg.setMode(PsgDeviceChannel.MODE_SIGNED);
     psg.setDevice(PsgDeviceChannel.DEVICE_AY_3_8910);
-    master.addChannel(psg);
-    audio = new AudioLooper(512);
-    audio.setChannel(master);
-    //audio = new SampleAudio(psg.sampleRate);
+    audio = new MasterAudio();
+    audio.master.addChannel(psg);
     video = new RasterVideo(mainElement,256,256);
     video.create();
     video.setKeyboardEvents(function(key,code,flags) {
@@ -130,12 +127,11 @@ var KonamiSoundPlatform = function(mainElement) {
   }
   this.pause = function() {
     timer.stop();
-    //audio.stop();
+    audio.stop();
   }
   this.resume = function() {
     timer.start();
-    audio.activate();
-    resumeAudioContext(audio.audioContext);
+    audio.start();
   }
   this.reset = function() {
     cpu.reset();

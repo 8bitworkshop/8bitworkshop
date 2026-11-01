@@ -6,7 +6,7 @@ import { BaseDebugPlatform, DebugEvalCondition, DebugSymbols, EmuState, isDebugg
 import { EmuHalt, PLATFORMS, setHaltHandler } from "../common/emu";
 import { BOOKS, bookFor, firstVisitDemo } from "../common/books";
 import { PLATFORM_CONTROLS } from "../common/controls";
-import { isAudioBlocked, onAudioStateChange } from "../common/audio";
+import { isAudioBlocked, isAudioMuted, onAudioMuteChange, onAudioStateChange, setAudioMuted } from "../common/audio";
 import { installHDLHost } from "./hdlhost";
 import { StateRecorderImpl } from "../common/recorder";
 import {
@@ -1814,6 +1814,7 @@ function setupDebugControls() {
     if (!promptGoToAddress()) resume();
   });
   uitoolbar.add('mod+shift+g', 'Resume', 'glyphicon-play', resume).prop('id', 'dbg_go');
+  setupAudioMute();
   // F8: single-key pause/resume toggle; chip shown via getGlobalShortcuts()
   uitoolbar.add('F8', 'Pause/Resume', '', togglePauseResume);
   // F1: context-sensitive help for the active view (editor/tool/platform)
@@ -2334,43 +2335,105 @@ function renderControls(div: JQuery) {
   return div.children().length > 0;
 }
 
+const AUDIO_MUTED_KEY = '8bitworkshop.muted';
+
+let audioMuteButton: JQuery = null;
+
+function loadAudioMutePref() {
+  if (hasLocalStorage && !isEmbed && localStorage.getItem(AUDIO_MUTED_KEY) === 'true') {
+    setAudioMuted(true);
+  }
+}
+
+function saveAudioMutePref() {
+  if (hasLocalStorage && !isEmbed) {
+    localStorage.setItem(AUDIO_MUTED_KEY, isAudioMuted() ? 'true' : 'false');
+  }
+}
+
+function updateAudioMuteButton() {
+  if (!audioMuteButton) return;
+  const muted = isAudioMuted();
+  audioMuteButton.attr('aria-pressed', muted ? 'true' : 'false')
+    .prop('title', muted ? 'Unmute' : 'Mute')
+    .toggleClass('active', muted)
+    .find('.glyphicon')
+    .toggleClass('glyphicon-volume-up', !muted)
+    .toggleClass('glyphicon-volume-off', muted);
+}
+
+function toggleAudioMute() {
+  const muted = !isAudioMuted();
+  setAudioMuted(muted);
+  saveAudioMutePref();
+  // hosts that own their audio (Javatari) need to hear about it too
+  if (platform.setMuted) platform.setMuted(muted);
+  // Unmuting is itself the user gesture browsers require. Only resume a
+  // running emulator: unmuting while paused should not start it.
+  if (!muted && platform && platform.isRunning()) platform.resume();
+}
+
+function setupAudioMute() {
+  // platforms either use the shared SampleAudio graph or implement setMuted
+  // for their own audio (Javatari); VCS/jt4 and MAME may have neither
+  const canMute = platform && ((platform as any).audio || platform.setMuted);
+  if (!canMute) return;
+  audioMuteButton = uitoolbar.add('', 'Mute', 'glyphicon-volume-up', toggleAudioMute);
+  onAudioMuteChange(updateAudioMuteButton);
+  if (platform.setMuted) platform.setMuted(isAudioMuted());
+  updateAudioMuteButton();
+}
+
 function showAudioHint() {
   const hint = $("#emuaudiohint");
   if (!hint.length) return;
   let wasBlocked = false;
+  let unsubscribeState = null;
+  let unsubscribeMute = null;
   const update = () => {
     if (isAudioBlocked()) {
       wasBlocked = true;
+      // an explicit mute is not the autoplay block, so don't promise to unmute
+      hint.text(isAudioMuted() ? 'Click screen to use controls' : 'Click screen to use controls and unmute audio');
       hint.show();
     } else {
       hint.hide();
-      if (wasBlocked) unsubscribe();
+      if (wasBlocked) {
+        unsubscribeState && unsubscribeState();
+        unsubscribeMute && unsubscribeMute();
+      }
     }
   };
   // AudioContext.resume() is async, so wait for the context to actually start
   // instead of hiding on the click that asked it to.
-  const unsubscribe = onAudioStateChange(update);
+  unsubscribeState = onAudioStateChange(update);
+  unsubscribeMute = onAudioMuteChange(update);
   update();
 }
 
 function showInstructions() {
   showAudioHint();
   var div = $("#emucontrols");
-  if (!renderControls(div)) return;
-  if (platform_id.endsWith(".mame")) div.show(); // TODO: MAME seems to eat the focus() event
+  var hasControls = renderControls(div);
+  if (hasControls && platform_id.endsWith(".mame")) div.show(); // TODO: MAME seems to eat the focus() event
   var vcanvas = $("#emulator").find("canvas");
   if (vcanvas) {
-    vcanvas.on('focus', () => {
+    const focusHandler = () => {
       if (platform.isRunning()) {
-        div.fadeIn(200);
-        // unlock audio for browser autoplay policy (resume() no-ops if already running;
-        // don't pair with pause() first -- suspend()/resume() are async and racing them
-        // here left the AudioContext stuck suspended)
+        if (hasControls) div.fadeIn(200);
+        // unlock audio for the browser's autoplay policy (resume() no-ops if
+        // already running; don't pair with pause() first -- suspend()/resume()
+        // are async and racing them here left the AudioContext stuck suspended).
+        // Do not change an explicit mute: only the mute button does that.
         platform.resume();
       }
-    });
+    };
+    vcanvas.on('focus', focusHandler);
+    // clicking an already-focused canvas doesn't fire focus, but it is still
+    // a user gesture that can unlock a suspended AudioContext
+    vcanvas.on('click', focusHandler);
     vcanvas.on('blur', () => {
-      div.fadeOut(200);
+      if (hasControls) div.fadeOut(200);
     });
   }
 }
@@ -2595,6 +2658,7 @@ export async function startUI() {
     delete qs.repo; // continue without repo
   }
   getPlatformAndRepo();
+  loadAudioMutePref();
   setupSplits({
     getPlatformId: () => platform_id,
     isEmbed: isEmbed,

@@ -34,7 +34,9 @@ export and import files, share playable links and videos, sync projects to GitHu
 Every platform includes a built-in emulator that runs your code on
 simulated hardware. Click the emulator screen to give it keyboard focus.
 The IDE shows the key bindings used by the current platform; some
-platforms also support gamepads.
+platforms also support gamepads. Platforms that make sound show a
+**Mute** button on the toolbar. Clicking the emulator screen also unlocks
+audio for the browser, unless you explicitly muted it.
 
 ## Compilers
 

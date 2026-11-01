@@ -95,6 +95,8 @@ export interface Platform {
   getPresets?(): Preset[];
   pause(): void;
   resume(): void;
+  /** Hosts that own their audio (Javatari) implement this so the mute button reaches it. */
+  setMuted?(muted: boolean): void;
   loadROM(title: string, rom: any, origin?: number); // TODO: Uint8Array
   loadBIOS?(title: string, rom: Uint8Array);
   getROMExtension?(rom: FileData): string;

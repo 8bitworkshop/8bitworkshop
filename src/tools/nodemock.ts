@@ -72,26 +72,11 @@ export function mockAudio() {
         setBufferLength(length: number) { this.channels.forEach((c) => c.setBufferLength(length)); }
         setSampleRate(rate: number) { this.channels.forEach((c) => c.setSampleRate(rate)); }
     }
-    // MasterAudio wraps the real TSS AudioLooper, which needs a browser
-    // AudioContext. A platform's resume() starts audio, so breakpoint and
-    // other headless tests would otherwise throw; absorb the calls instead.
-    class NullAudioLooper {
-        channel: any = null;
-        audioContext: any = null;
-        constructor(_bufferSize?: number) { }
-        setChannel(channel: any) {
-            if (channel != null) {
-                channel.setBufferLength(1024);
-                channel.setSampleRate(44100);
-            }
-            this.channel = channel;
-        }
-        activate() { }
-        getSampleRate() { return 44100; }
-    }
+    // MasterAudio drives the real TSS MasterChannel through SampleAudio's
+    // Web Audio graph. Node has no AudioContext, so SampleAudio stays silent;
+    // the channel stand-in still has to keep the register interfaces alive.
     global.MasterChannel = NullMasterChannel;
     global.PsgDeviceChannel = NullPsgDeviceChannel;
-    global.AudioLooper = NullAudioLooper;
 }
 
 /** Serve fetch() from the filesystem, relative to `rootDir`. */

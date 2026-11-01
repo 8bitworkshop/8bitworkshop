@@ -68,6 +68,7 @@ class VCSPlatform extends BasePlatform {
   canvas : HTMLCanvasElement;
   frame : VideoOutput | null = null; // see captureVideo()
   capturing = false;
+  muted = false;
 
   // TODO: super hack for ProbeBitmap view
   machine = {
@@ -211,6 +212,18 @@ class VCSPlatform extends BasePlatform {
     // for browser autostart
     Javatari.room.speaker.powerOff();
     Javatari.room.speaker.powerOn();
+    this.applyMute();
+  }
+  setMuted(muted: boolean) {
+    this.muted = muted;
+    this.applyMute();
+  }
+  private applyMute() {
+    const speaker = Javatari.room && Javatari.room.speaker;
+    if (!speaker) return;
+    // pause/debug also mute Javatari's speaker; only play while running
+    if (this.muted || !this.isRunning()) speaker.mute();
+    else speaker.play();
   }
   advance() : number {
     Javatari.room.console.clockPulse();
@@ -255,14 +268,14 @@ class VCSPlatform extends BasePlatform {
     this.lastBreakState = null;
     Javatari.room.console.disableDebug();
     Javatari.room.console.onBreakpointHit = null;
-    if (this.isRunning()) Javatari.room.speaker.play();
+    this.applyMute();
   }
 
   reset() {
     Javatari.room.console.powerOff();
     Javatari.room.console.resetDebug();
     Javatari.room.console.powerOn();
-    Javatari.room.speaker.play();
+    this.applyMute();
   }
   getOriginPC() {
     return (this.readAddress(0xfffc) | (this.readAddress(0xfffd) << 8)) & 0xffff;
