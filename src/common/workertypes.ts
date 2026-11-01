@@ -174,6 +174,10 @@ export interface WorkerError extends SourceLocation {
   msg:string,
   /** a missing severity means 'error'; only warnings leave a build successful */
   severity?:'error'|'warning',
+  /** extra advice lines from the tool (urust's `help` array); plain text, with backticks for code */
+  help?:string[],
+  /** stable help-page slug for more information (urust's `topic`) */
+  topic?:string,
 }
 
 export interface CodeListing {

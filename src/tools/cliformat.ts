@@ -5,6 +5,7 @@
 // command implementations free of ANSI noise.
 
 import { hex } from '../common/util';
+import { urustErrorDocURL } from '../common/toolmeta';
 
 export interface CLIResult {
   success: boolean;
@@ -143,6 +144,11 @@ function formatBuild(data: any): void {
       if (err.line) loc += `${c.dim}:${c.reset}${c.yellow}${err.line}${c.reset}`;
       if (loc) loc += ` ${c.dim}-${c.reset} `;
       console.log(`  ${c.red}●${c.reset} ${loc}${err.msg || err.message || JSON.stringify(err)}`);
+      for (const help of err.help || []) {
+        console.log(`      ${c.dim}= help:${c.reset} ${help}`);
+      }
+      const url = urustErrorDocURL(err.topic);
+      if (url) console.log(`      ${c.dim}see ${url}${c.reset}`);
     }
     return;
   }

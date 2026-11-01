@@ -537,7 +537,9 @@ export class SourceEditor implements ProjectView {
         if (isNaN(line) || line < 1 || line > numLines) line = 1;
         // an error on the line wins over a warning
         if (!(info.severity === 'warning' && newErrors.has(line))) {
-          newErrors.set(line, { msg: info.msg, warning: info.severity === 'warning' });
+          newErrors.set(line, {
+            msg: info.msg, warning: info.severity === 'warning', help: info.help, topic: info.topic
+          });
         }
         // collect column-level spans
         if (info.start != null && info.end != null && info.end > info.start) {

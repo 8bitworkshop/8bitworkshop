@@ -356,6 +356,23 @@ div.is-busy-unused {
 #error_alert_msg a {
   cursor: pointer;
 }
+#error_alert_msg code,
+.cm-error-message code {
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-family: monospace;
+}
+.error-help {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.95em;
+  opacity: 0.9;
+}
+.error-help a {
+  color: inherit;
+  text-decoration: underline;
+}
 div.menu_div {
   position: absolute;
   width: 200px;

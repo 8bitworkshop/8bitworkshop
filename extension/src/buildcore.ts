@@ -34,6 +34,10 @@ export interface BuildDiagnostic {
   msg: string;
   /** a missing severity means 'error' */
   severity?: 'error' | 'warning';
+  /** extra advice lines from the tool, with backticks for code */
+  help?: string[];
+  /** help-page slug for more information (urust's error topics) */
+  topic?: string;
 }
 
 export interface BuildOutcome extends BuildProducts {
@@ -121,7 +125,10 @@ export class Builder {
     }
     var toPath = (err: WorkerError) => (err.path && filename2path[err.path]) || err.path || req.mainPath;
     var toDiagnostic = (err: WorkerError): BuildDiagnostic =>
-      ({ path: toPath(err), line: err.line || 0, msg: err.msg, ...(err.severity && { severity: err.severity }) });
+      ({
+        path: toPath(err), line: err.line || 0, msg: err.msg, ...(err.severity && { severity: err.severity }),
+        ...(err.help && { help: err.help }), ...(err.topic && { topic: err.topic })
+      });
     if (!result || ('unchanged' in result && result.unchanged)) {
       // the worker skips unchanged builds, but Run still needs the output.
       // Keep the last success even after a failed build: reverting to the

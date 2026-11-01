@@ -16,6 +16,7 @@ import { WorkerDebugBackend } from './debugbackend';
 import { EmuDebugSession, LaunchArgs } from '../../src/tools/dapsession';
 import { ASM_LANGUAGE_CPUS, Project, findRootDir, isHeaderFile, isInside, isOwnExtension, isSourceFile, languageFor } from './projectinfo';
 import { CONFIG, ProjectScope } from './projectscope';
+import { urustErrorDocURL } from '../../src/common/toolmeta';
 import { BuildReason, BuildScheduler } from './autobuild';
 import { PRESET_SCHEME, PresetFileSystem, Templates } from './templates';
 import { chooseForFile, detectDirectoryAt, detectionSummary, describeDetection, describeFinding, dontAskKey, FolderFinding, platformName, scanFolder } from './detection';
@@ -978,6 +979,12 @@ function showDiagnostics(result: BuildOutcome, toUri: (rel: string) => vscode.Ur
     var severity = d.severity === 'warning' ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error;
     var diag = new vscode.Diagnostic(range, d.msg, severity);
     diag.source = result.tool;
+    if (d.help?.length) {
+      diag.relatedInformation = d.help.map((text) =>
+        new vscode.DiagnosticRelatedInformation(new vscode.Location(uri, range), '= help: ' + text));
+    }
+    var docsURL = urustErrorDocURL(d.topic);
+    if (docsURL) diag.code = { value: 'urust docs', target: vscode.Uri.parse(docsURL) };
     byFile.get(key)!.diags.push(diag);
   }
   for (var { uri, diags } of byFile.values()) diagnostics.set(uri, diags);

@@ -17,6 +17,14 @@ export interface UrustDiagnostic {
     col: number;
     endLine: number;
     endCol: number;
+    /** the source line, if there is one (not used by the builder yet) */
+    lineText?: string | null;
+    /** `= help:` advice lines; plain text with backtick code spans */
+    help?: string[];
+    /** error-topic slug, e.g. `no-string` */
+    topic?: string | null;
+    /** macro-expansion and other `= note:` lines */
+    notes?: string[];
 }
 
 /** urust's `--debug-out` / `--emit debug` document. `bank` is null when unbanked. */
@@ -62,6 +70,10 @@ export function parseUrustDiagnostics(stderr: string, defaultPath: string): { er
         }
         for (const d of diags) {
             const e: WorkerError = { line: d.line, path: d.file ?? defaultPath, msg: d.message };
+            // Older urust builds have neither field; leave them off then so the
+            // WorkerError shape stays as small as the diagnostic needs.
+            if (d.help && d.help.length) e.help = d.help;
+            if (d.topic) e.topic = d.topic;
             if (d.line > 0) {
                 e.start = d.col - 1;
                 if (d.endLine === d.line) e.end = d.endCol - 1;

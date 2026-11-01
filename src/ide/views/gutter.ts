@@ -11,13 +11,17 @@ const setClock = StateEffect.define<Map<number, string>>();
 const requestToggleBreakpoint = StateEffect.define<number>();
 const setAllBreakpoints = StateEffect.define<{ line: number, enabled: boolean }[]>();
 /** the message for a line; a warning is marked differently but doesn't fail the build */
-export interface ErrorInfo { msg: string, warning?: boolean }
+export interface ErrorInfo {
+    msg: string, warning?: boolean,
+    /** the tool's `= help:` lines and help-page topic, if it gave any */
+    help?: string[], topic?: string
+}
 
 const setErrors = StateEffect.define<Map<number, ErrorInfo>>();
 const setCurrentPc = StateEffect.define<number | null>();
 const runToLineEffect = StateEffect.define<number>();
 
-const showErrorMessage = StateEffect.define<{ line: number, msg: string, warning?: boolean, toggle?: boolean } | null>();
+const showErrorMessage = StateEffect.define<{ line: number, msg: string, warning?: boolean, help?: string[], topic?: string, toggle?: boolean } | null>();
 
 const offsetField = StateField.define<RangeSet<GutterMarker>>({
     create() { return RangeSet.empty; },
@@ -114,7 +118,7 @@ const errorField = StateField.define<RangeSet<GutterMarker>>({
                 for (let [line, info] of map.entries()) {
                     if (line >= 1 && line <= tr.state.doc.lines) {
                         const pos = tr.state.doc.line(line).from;
-                        ranges.push(new ErrorMarker(line, info.msg, info.warning).range(pos));
+                        ranges.push(new ErrorMarker(line, info.msg, info.warning, info.help, info.topic).range(pos));
                     }
                 }
                 value = RangeSet.of(ranges, true);
@@ -194,16 +198,20 @@ const BREAKPOINT_MARKER = new BreakpointMarker(true);
 const DISABLED_BREAKPOINT_MARKER = new BreakpointMarker(false);
 
 class ErrorMarker extends GutterMarker {
-    constructor(readonly line: number, readonly msg: string, readonly warning?: boolean) { super(); }
+    constructor(readonly line: number, readonly msg: string, readonly warning?: boolean,
+        readonly help?: string[], readonly topic?: string) { super(); }
 
     toDOM() {
         const span = document.createElement("span");
         span.className = this.warning ? "gutter-warning" : "gutter-error";
         span.innerHTML = this.warning ? "⚠" : "ⓧ";
-        span.title = this.msg;
+        span.title = [this.msg, ...(this.help || []).map((h) => "= help: " + h)].join("\n");
         return span;
     }
-    eq(other: ErrorMarker) { return this.line == other.line && this.msg == other.msg && this.warning == other.warning; }
+    eq(other: ErrorMarker) {
+        return this.line == other.line && this.msg == other.msg && this.warning == other.warning
+            && this.topic == other.topic && this.help === other.help;
+    }
 }
 
 const CURRENT_PC_PLACEHOLDER_MARKER = new class extends GutterMarker {
@@ -274,14 +282,18 @@ const statusGutter = gutter({
                 const pos = line.from;
                 let msg = "";
                 let warning = false;
+                let help: string[] | undefined;
+                let topic: string | undefined;
                 errorMarkers.between(pos, pos, (from, to, marker: ErrorMarker) => {
                     msg = marker.msg;
                     warning = marker.warning === true;
+                    help = marker.help;
+                    topic = marker.topic;
                 });
                 if (msg) {
                     const lineNum = view.state.doc.lineAt(line.from).number;
                     view.dispatch({
-                        effects: showErrorMessage.of({ line: lineNum, msg, warning, toggle: true })
+                        effects: showErrorMessage.of({ line: lineNum, msg, warning, help, topic, toggle: true })
                     });
                 }
             } else if (canUseBreakpoints()) {

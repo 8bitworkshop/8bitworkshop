@@ -86,7 +86,7 @@ export interface ToolIncludePattern {
    *  not for build dependency scanning */
   system?: boolean;
 }
-   
+
 export interface ToolMeta {
   /** join key, e.g. 'cc65', 'dasm', 'llvm-mos'. Note: 'remote:' is a transport
    *  prefix, not part of the id -- getToolMeta() strips it. */
@@ -276,6 +276,19 @@ export const URUST_INCLUDE_PATTERNS: (RegExp | ToolIncludePattern)[] = [
   { re: URUST_RS8_MODULE_PATTERN, suffix: '.rs' },
   { re: /^\s*(?:pub(?:\([^)]*\))?\s+)?use\s+(?!self\b|super\b|crate\b|rs8\b)([A-Za-z_][A-Za-z0-9_]*)\s*::/gm, suffix: '.rs' },
 ];
+
+/** urust's published documentation (an mdBook build). */
+export const URUST_DOCS_URL = 'https://8bitworkshop.com/docs/urust/';
+
+/**
+ * URL for an urust error topic (`topic` in `--error-format json`) in the
+ * published docs, or undefined when the topic is missing or malformed. The
+ * slugs are stable and the mdBook headings carry them as explicit anchors.
+ */
+export function urustErrorDocURL(topic?: string | null): string | undefined {
+  if (!topic || !/^[A-Za-z0-9_-]+$/.test(topic)) return undefined;
+  return `${URUST_DOCS_URL}reference/errors.html#${topic}`;
+}
 
 //// preload filesystem names per tool/platform (was TOOL_PRELOADFS)
 
@@ -797,6 +810,7 @@ export const TOOL_META: { [id: string]: ToolMeta } = {
     extensions: ['.rs'],
     editorStyle: 'rust',
     wasmModule: 'urust',
+    helpURL: URUST_DOCS_URL,
     version: '0.0.1',
     // the compiler embeds the rs8 sources; ship them as a WASI filesystem so
     // the editor can open them (view-only -- the build uses the embedded ones)

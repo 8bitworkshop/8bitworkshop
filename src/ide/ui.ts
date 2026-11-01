@@ -36,6 +36,7 @@ import { AssetEditorView } from "./views/asseteditor";
 import { isMobileDevice } from "./views/baseviews";
 import { AddressHeatMapView, BinaryFileView, BreakpointsView, MemoryMapView, MemoryView, ProbeLogView, ProbeSymbolView, RasterStackMapView, ScanlineIOView, VRAMMemoryView } from "./views/debugviews";
 import { DisassemblerView, HeaderView, ListingView, PC_LINE_LOOKAHEAD, SourceEditor, setUppercaseOnly } from "./views/editors";
+import { appendErrorHelp, appendErrorText } from "./views/errormarkup";
 import { HELP_TOPICS, HelpView, helpDescriptionForView, helpTopicForView } from "./views/helpview";
 import { elementHelpTopicForFocus } from "./helptopics";
 import { CallGraphView, DebugBrowserView } from "./views/treeviews";
@@ -982,7 +983,10 @@ function getErrorElement(err: WorkerError) {
     span.append(link);
     span.append('&nbsp;');
   }
-  span.append($('<span/>').text(err.msg));
+  var msg = $('<span/>');
+  appendErrorText(msg[0], err.msg);
+  span.append(msg);
+  appendErrorHelp(span[0] as HTMLElement, err.help, err.topic);
   return span;
 }
 

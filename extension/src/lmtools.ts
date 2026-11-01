@@ -10,6 +10,7 @@
 
 import * as vscode from 'vscode';
 import type { BuildOutcome } from './buildcore';
+import { urustErrorDocURL } from '../../src/common/toolmeta';
 import type { ScriptResult } from './emuworker';
 
 export interface ToolTarget {
@@ -91,6 +92,9 @@ export function describeBuild(t: ToolTarget, r: BuildOutcome): string {
   if (r.success && nwarn) lines[0] += ` ${nwarn} warning(s):`;
   for (var d of r.diagnostics) {
     lines.push(`${relative(vscode.Uri.joinPath(t.main, '..', d.path))}:${d.line}: ${d.severity === 'warning' ? 'warning: ' : ''}${d.msg}`);
+    for (var h of d.help || []) lines.push(`  = help: ${h}`);
+    var docsURL = urustErrorDocURL(d.topic);
+    if (docsURL) lines.push(`  see ${docsURL}`);
   }
   return lines.join('\n');
 }

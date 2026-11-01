@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import JSZip from "jszip";
 import { describe, it } from "mocha";
-import { getIncludeDirs, getIncludePatterns, getSharedFileSystemName, matchDependencyPatterns } from "../../src/common/toolmeta";
+import { getIncludeDirs, getIncludePatterns, getSharedFileSystemName, matchDependencyPatterns, urustErrorDocURL } from "../../src/common/toolmeta";
 import { getToolForPlatform } from "../../src/common/toolselect";
 import { toolRoot } from "../../src/tools/toolroot";
 import {
@@ -84,12 +84,28 @@ describe('urust tool', function () {
       { level: 'error', message: 'bad type', file: 'main.rs', line: 2, col: 5, endLine: 2, endCol: 9 },
       { level: 'error', message: 'spans lines', file: 'main.rs', line: 4, col: 1, endLine: 6, endCol: 2 },
       { level: 'warning', message: 'in `f`: big', file: null, line: 0, col: 0, endLine: 0, endCol: 0 },
+      { level: 'error', message: 'struct `P` must derive Clone and Copy', file: 'main.rs', line: 8, col: 1,
+        endLine: 8, endCol: 5, help: ['add `#[derive(Clone, Copy)]` to `P`'], topic: 'no-clone' },
     ]);
     const { errors, warnings } = parseUrustDiagnostics(json + '\nurust: unknown option `-x`\n', 'main.rs');
     assert.deepStrictEqual(errors[0], { line: 2, path: 'main.rs', msg: 'bad type', start: 4, end: 8 });
     assert.deepStrictEqual(errors[1], { line: 4, path: 'main.rs', msg: 'spans lines', start: 0 });
-    assert.deepStrictEqual(errors[2], { line: 0, path: 'main.rs', msg: 'unknown option `-x`' });
+    assert.deepStrictEqual(errors[2], {
+      line: 8, path: 'main.rs', msg: 'struct `P` must derive Clone and Copy', start: 0, end: 4,
+      help: ['add `#[derive(Clone, Copy)]` to `P`'], topic: 'no-clone'
+    });
+    assert.deepStrictEqual(errors[3], { line: 0, path: 'main.rs', msg: 'unknown option `-x`' });
     assert.deepStrictEqual(warnings, [{ line: 0, path: 'main.rs', msg: 'in `f`: big', severity: 'warning' }]);
+  });
+
+  it('maps error topics to the published help docs', function () {
+    assert.strictEqual(urustErrorDocURL('no-clone'),
+      'https://8bitworkshop.com/docs/urust/reference/errors.html#no-clone');
+    assert.strictEqual(urustErrorDocURL('no-64-bit-int'),
+      'https://8bitworkshop.com/docs/urust/reference/errors.html#no-64-bit-int');
+    assert.strictEqual(urustErrorDocURL(null), undefined);
+    assert.strictEqual(urustErrorDocURL(''), undefined);
+    assert.strictEqual(urustErrorDocURL('bad slug/../x'), undefined);
   });
 
   const dbg: UrustDebug = {

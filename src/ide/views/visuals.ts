@@ -1,5 +1,6 @@
 
 import { errorMarkers } from "./gutter";
+import { appendErrorHelp, appendErrorText } from "./errormarkup";
 import { TRACED_HEAT_LEVELS } from "./traceheat";
 
 import { SelectionRange, StateEffect, StateField } from "@codemirror/state";
@@ -33,11 +34,14 @@ const currentPcLineField = StateField.define({
 
 // Error message widget to show below error lines
 class ErrorMessageWidget extends WidgetType {
-  constructor(readonly message: string, readonly warning?: boolean) { super() }
+  constructor(readonly message: string, readonly warning?: boolean,
+    readonly help?: string[], readonly topic?: string) { super() }
 
   toDOM() {
     let div = document.createElement("div");
-    div.textContent = this.message;
+    div.className = "cm-error-message";
+    appendErrorText(div, this.message);
+    appendErrorHelp(div, this.help, this.topic);
     div.style.cssText = this.warning ? `
       color: #ffcc44;
       background-color: #332900;
@@ -57,7 +61,7 @@ class ErrorMessageWidget extends WidgetType {
   }
 }
 
-interface ErrorMessageInfo { msg: string, warning?: boolean }
+interface ErrorMessageInfo { msg: string, warning?: boolean, help?: string[], topic?: string }
 
 // State field to manage error message decorations (supports multiple messages)
 const errorMessageField = StateField.define<DecorationSet>({
@@ -82,7 +86,9 @@ const errorMessageField = StateField.define<DecorationSet>({
               const lineNum = tr.state.doc.lineAt(to).number;
               if (value.spec.widget instanceof ErrorMessageWidget) {
                 const widget = value.spec.widget as ErrorMessageWidget;
-                existingMessages.set(lineNum, { msg: widget.message, warning: widget.warning });
+                existingMessages.set(lineNum, {
+                  msg: widget.message, warning: widget.warning, help: widget.help, topic: widget.topic
+                });
               }
             } catch { }
           });
@@ -95,7 +101,9 @@ const errorMessageField = StateField.define<DecorationSet>({
             existingMessages.delete(e.value.line);
           } else {
             // Add the new message
-            existingMessages.set(e.value.line, { msg: e.value.msg, warning: e.value.warning });
+            existingMessages.set(e.value.line, {
+              msg: e.value.msg, warning: e.value.warning, help: e.value.help, topic: e.value.topic
+            });
           }
 
           // Build sorted decorations
@@ -106,7 +114,7 @@ const errorMessageField = StateField.define<DecorationSet>({
               const info = existingMessages.get(lineNum)!;
               widgets.push(
                 Decoration.widget({
-                  widget: new ErrorMessageWidget(info.msg, info.warning),
+                  widget: new ErrorMessageWidget(info.msg, info.warning, info.help, info.topic),
                   block: true,
                   side: 1
                 }).range(line.to)
