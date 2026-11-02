@@ -81,6 +81,10 @@ export interface ToolIncludePattern {
   re: RegExp;
   group?: number;
   suffix?: string;
+  /** rewrite the filename (from `group`, or the last group) before `suffix`.
+   *  Gets the whole match so it can use other groups, e.g. Rust's `a::b` ->
+   *  `a/b` when `b` is a child module of `a`. */
+  transform?: (name: string, m: RegExpExecArray) => string;
   /** true for system includes (#include <foo.h>) -- resolved from the
    *  toolchain filesystem, not the project; used for UI links only,
    *  not for build dependency scanning */
@@ -266,14 +270,52 @@ export const DIALOG_INCLUDE_PATTERNS: RegExp[] = [
 // keywords (self/super/crate) stay out. urust loads modules itself -- no
 // separate link step is involved.
 const URUST_MOD_PATTERN = /^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/gm;
-// the modules in crates/rs8/src (and the io shim) that urust bundles
-const URUST_RS8_MODULE_PATTERN = /\brs8::(apple2|atari8|c64|conio|io|nes|rand|vcs|vic20|zx)\b/g;
+// The modules in crates/rs8/src (and the io/host shims) that urust bundles.
+// `rs8::lib` is the crate root, not a module a program can name.
+export const URUST_RS8_MODULES = [
+  'apple2', 'atari8', 'bcd', 'beeper', 'c64', 'cbm', 'coleco', 'conio',
+  'console', 'containers', 'far', 'fixed', 'font', 'host', 'io', 'joy',
+  'key', 'math', 'mem', 'msx', 'nes', 'notes', 'palette', 'rand', 'serial',
+  'text', 'tms9918', 'tone', 'vcs', 'vic20', 'zx',
+];
+// Child modules of those libraries: `rs8::nes::util` is rs8/nes/util.rs, not
+// the parent rs8/nes.rs. Mirrors urust's CHILDREN table in
+// crates/urust-syntax/src/stdmods.rs; test/unit/testurust.ts checks it against
+// the bundled sources.
+export const URUST_RS8_CHILDREN: { [module: string]: string[] } = {
+  apple2: ['console', 'tone', 'util'],
+  atari8: ['console', 'tone', 'util'],
+  c64: ['console', 'tone', 'util'],
+  cbm: ['console', 'regs'],
+  coleco: ['util'],
+  host: ['console', 'tone'],
+  msx: ['util'],
+  nes: ['console', 'tone', 'util'],
+  tms9918: ['console'],
+  vcs: ['util'],
+  vic20: ['console', 'tone', 'util'],
+  zx: ['console', 'tone', 'util'],
+};
+const URUST_RS8_MODULE_PATTERN = new RegExp(
+  `\\brs8::(${URUST_RS8_MODULES.join('|')})(?:::([A-Za-z_][A-Za-z0-9_]*))?\\b`, 'g');
+// A `use` names the module (or one of its children) and then the items it
+// wants; only the module path becomes a file. A lowercase item after the
+// module (rs8::math::sin) stays with the module unless it is a known child.
+const URUST_RS8_MODULE: ToolIncludePattern = {
+  re: URUST_RS8_MODULE_PATTERN,
+  group: 1,
+  suffix: '.rs',
+  transform: (name, m) => {
+    const child = m[2];
+    return child && (URUST_RS8_CHILDREN[name] || []).includes(child) ? name + '/' + child : name;
+  },
+};
 export const URUST_INCLUDE_PATTERNS: (RegExp | ToolIncludePattern)[] = [
   /\binclude_(?:bytes|str)!\s*\(\s*"(.+?)"\s*\)/g,
   ...SHARED_RESOURCE_PATTERNS,
   { re: URUST_MOD_PATTERN, suffix: '.rs' },
   { re: URUST_MOD_PATTERN, suffix: '/mod.rs' },
-  { re: URUST_RS8_MODULE_PATTERN, suffix: '.rs' },
+  URUST_RS8_MODULE,
   { re: /^\s*(?:pub(?:\([^)]*\))?\s+)?use\s+(?!self\b|super\b|crate\b|rs8\b)([A-Za-z_][A-Za-z0-9_]*)\s*::/gm, suffix: '.rs' },
 ];
 
@@ -1128,7 +1170,8 @@ export function getSharedFileSystemName(tool: string, platform?: string): string
 /**
  * Run a set of include/link patterns over source text, returning the
  * referenced filenames. The filename comes from the pattern's `group`, or
- * from the last capture group if unspecified, plus any implicit `suffix`.
+ * from the last capture group if unspecified; `transform` may rewrite it, then
+ * any implicit `suffix` is added.
  */
 export function matchDependencyPatterns(text: string, patterns: (RegExp | ToolIncludePattern)[]): string[] {
   let files: string[] = [];
@@ -1143,7 +1186,9 @@ export function matchDependencyPatterns(text: string, patterns: (RegExp | ToolIn
       // native call stack) at every line of a large source file
       while (m = p.re.exec(line)) {
         let fn = m[p.group != null ? p.group : m.length - 1];
-        if (fn) files.push(p.suffix ? fn + p.suffix : fn);
+        if (!fn) continue;
+        if (p.transform) fn = p.transform(fn, m);
+        files.push(p.suffix ? fn + p.suffix : fn);
       }
     }
   }

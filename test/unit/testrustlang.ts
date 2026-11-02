@@ -36,6 +36,17 @@ describe('Rust editor support', function () {
       ['audio/mod.rs', 'bcd.rs']);
   });
 
+  it('links a nested rs8 module to the child source', function () {
+    const doc = EditorState.create({
+      doc: 'use rs8::nes::util::{pad_poll, ppu_off, PpuSafe};\nuse rs8::nes::PPUCTRL;\n'
+    }).doc;
+    const ranges = [{ from: 0, to: doc.length }];
+    // the child module is its own file; an item of the parent stays with it
+    assert.deepStrictEqual(
+      findIncludeLinks(doc, ranges, URUST_INCLUDE_PATTERNS).map(l => l.filename),
+      ['nes/util.rs', 'nes.rs']);
+  });
+
   it('extracts Rust fn declarations as symbols', function () {
     const records = extractSymbols('fn draw(x: u8) {}\nfn main() {}\n', 'main.rs', 'rust', 'project');
     assert.deepStrictEqual(records.filter(r => r.kind === 'func').map(r => r.name), ['draw', 'main']);

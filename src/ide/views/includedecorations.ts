@@ -59,9 +59,11 @@ export function findIncludeLinks(
       while ((m = p.re.exec(text))) {
         const matched = m[p.group != null ? p.group : m.length - 1];
         if (!matched) continue;
-        // apply any implicit extension (e.g. wiz `import "nes"` -> "nes.wiz"),
-        // same as matchDependencyPatterns() does for build deps
-        const filename = p.suffix ? matched + p.suffix : matched;
+        // let the pattern rewrite the name (urust `rs8::nes::util` ->
+        // `nes/util`) before any implicit extension (e.g. wiz `import "nes"`
+        // -> "nes.wiz"), same as matchDependencyPatterns() does for build deps
+        const name = p.transform ? p.transform(matched, m) : matched;
+        const filename = p.suffix ? name + p.suffix : name;
         const matchEnd = Math.min(from + m.index + m[0].length, doc.length);
         const line = doc.lineAt(matchEnd);
         const key = line.number + ':' + (from + m.index);

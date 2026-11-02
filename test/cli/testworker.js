@@ -424,6 +424,15 @@ describe('Worker', function() {
     assert.ok(result.symbolmap['ART'] > 0);
   });
 
+  it('should read a nested rs8 module from the bundled sources', async function() {
+    if (!haveUrust) return this.skip();
+    // clicking `use rs8::nes::util::...` opens this file, not the parent nes.rs
+    var msg = await queryWorker({preload_fs:'wasi:urust-fs.zip', readshared:'/rs8/nes/util.rs', updates:[], buildsteps:[], qid:129});
+    assert.ok(msg.output instanceof Uint8Array);
+    assert.ok(new TextDecoder().decode(msg.output).includes('pub fn'));
+    assert.equal(msg.qid, 129);
+  });
+
   it('should compile oscar64 for atari8 into an XEX image', async function() {
     var msgs = [{code:'#include <stdio.h>\n#include <conio.h>\nint main() { clrscr(); printf("FOO"); return 0; }', platform:'atari8-800', tool:'oscar64', path:'main.c', mainfile:true}];
     var result = await new Promise(function(resolve, reject) {

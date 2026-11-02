@@ -40,6 +40,8 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 
 ### Editor and UI
 
+- Clicking the link on an urust `use rs8::nes::util::…` line now opens the child module (`nes/util.rs`) instead of the parent `nes.rs`. A `use` of a child module resolves to its own file, while an item of the parent (`rs8::nes::PPUCTRL`, `rs8::math::sin`) still opens the module; the bundled sources now include the `rs8/<module>/` subdirectories, and a test keeps the child list in step with what the package ships.
+
 - The toolbar has a **Mute/Unmute** button, and clicking the emulator screen still unlocks audio for the browser's autoplay policy (an explicit mute stays muted). Either click counts as the user gesture browsers require to start audio. Platforms that render through TSS `MasterAudio` (vector games, Vectrex, Williams, the Apple II Mockingboard) now use the same `SampleAudio` graph as the rest, so they share its autoplay unlock and mute handling instead of creating a second `AudioContext`. Javatari's own speaker is wired to the same button too.
 
 - A first visit to the IDE now opens a random game from the books (`BOOK_DEMOS` in `src/common/books.ts`) instead of Hello World: VCS bricks, the Galaxian Solarian game, the Verilog racing game, the NES climber or the C-64 side-scroller. The chosen `?platform=`/`?file=` go into the address bar as usual, and a URL that names its own platform/file/repo keeps the old behavior.

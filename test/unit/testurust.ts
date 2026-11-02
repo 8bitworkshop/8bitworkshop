@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import JSZip from "jszip";
 import { describe, it } from "mocha";
-import { getIncludeDirs, getIncludePatterns, getSharedFileSystemName, matchDependencyPatterns, urustErrorDocURL } from "../../src/common/toolmeta";
+import { getIncludeDirs, getIncludePatterns, getSharedFileSystemName, matchDependencyPatterns, urustErrorDocURL, URUST_RS8_CHILDREN, URUST_RS8_MODULES } from "../../src/common/toolmeta";
 import { getToolForPlatform } from "../../src/common/toolselect";
 import { toolRoot } from "../../src/tools/toolroot";
 import {
@@ -45,6 +45,17 @@ describe('urust tool', function () {
     assert.deepStrictEqual(deps, ['nes.rs', 'io.rs']);
   });
 
+  it('links a nested rs8 module to its child source', function () {
+    const src = 'use rs8::nes::util::{pad_poll, ppu_off, PpuSafe};\n' +
+      'use rs8::cbm::regs::VIC;\n' +
+      'use rs8::math::sin;\n' +
+      'use rs8::nes::PPUCTRL;\n';
+    // a known child is a file of its own; a lowercase item (math::sin) and an
+    // uppercase type (nes::PPUCTRL) stay with their module
+    assert.deepStrictEqual(matchDependencyPatterns(src, getIncludePatterns('urust')),
+      ['nes/util.rs', 'cbm/regs.rs', 'math.rs', 'nes.rs']);
+  });
+
   it('links every platform module urust bundles', function () {
     const src = 'use rs8::apple2::*;\nuse rs8::vic20::*;\nuse rs8::zx::*;\n';
     assert.deepStrictEqual(matchDependencyPatterns(src, getIncludePatterns('urust')),
@@ -64,6 +75,26 @@ describe('urust tool', function () {
     const zip = await JSZip.loadAsync(fs.readFileSync(zipfile));
     for (const f of ['lib.rs', 'apple2.rs', 'atari8.rs', 'c64.rs', 'conio.rs', 'io.rs', 'nes.rs', 'rand.rs', 'vcs.rs', 'vic20.rs', 'zx.rs']) {
       assert.ok(zip.file('rs8/' + f), 'missing rs8/' + f);
+    }
+    // nested modules too: a link to rs8/nes/util.rs has to find the file
+    for (const [module, children] of Object.entries(URUST_RS8_CHILDREN)) {
+      for (const child of children) {
+        assert.ok(zip.file(`rs8/${module}/${child}.rs`), `missing rs8/${module}/${child}.rs`);
+      }
+    }
+    // ... and every source the package ships has to be linkable (so a new
+    // urust module or child cannot ship without being added to the pattern)
+    for (const entry of Object.keys(zip.files)) {
+      const nested = /^rs8\/([^/]+)\/([^/]+)\.rs$/.exec(entry);
+      if (nested) {
+        assert.ok((URUST_RS8_CHILDREN[nested[1]] || []).includes(nested[2]),
+          `unlisted child module ${entry}`);
+        continue;
+      }
+      const top = /^rs8\/([^/]+)\.rs$/.exec(entry);
+      if (top && top[1] !== 'lib') {
+        assert.ok(URUST_RS8_MODULES.includes(top[1]), `unlisted module ${entry}`);
+      }
     }
   });
 
