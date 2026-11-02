@@ -16,9 +16,6 @@ export function compileUrust(step: BuildStep): BuildStepResult {
     const dbgpath = step.prefix + ".json";
     if (!staleFiles(step, [binpath])) return;
     const platform = urustPlatformName(step.platform);
-    if (!platform) {
-        return { errors: [{ line: 0, path: step.path, msg: `urust does not support platform ${step.platform}` }] };
-    }
     fixParamsWithDefines(step.path, step.params); // //#flag, //#symbol, //#tooldef
     if (!wasiModule) {
         wasiModule = new WebAssembly.Module(loadWASMBinary("urust"));

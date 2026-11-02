@@ -1037,20 +1037,14 @@ export function getSkeletonName(tool: string): string {
  * platform (see toolselect.ts).
  */
 export const URUST_PLATFORM_NAMES: { [root: string]: string } = {
-  'bare': 'bare',
   'devel': 'devel-6502',
-  'nes': 'nes',
-  'c64': 'c64',
-  'atari8': 'atari8',
-  'vcs': 'vcs',
-  'apple2': 'apple2',
-  'vic20': 'vic20',
   'zx': 'zx-spectrum',
+  'coleco': 'colecovision'
 };
 
 /** urust's `--platform` name for an 8bitworkshop platform id, if it has one. */
 export function urustPlatformName(platform: string): string | undefined {
-  return URUST_PLATFORM_NAMES[platform.split(/[.-]/)[0]];
+  return URUST_PLATFORM_NAMES[platform.split(/[.-]/)[0]] || getRootBasePlatform(platform);
 }
 
 /**
