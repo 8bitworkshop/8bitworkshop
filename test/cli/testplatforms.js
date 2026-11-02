@@ -115,7 +115,7 @@ function checkForBigNonTypedArrays(obj, path='') {
   });
 }
 
-async function testPlatform(platid, romname, maxframes, callback) {
+async function testPlatform(platid, romname, maxframes, callback, romTransform) {
     if (!emu.PLATFORMS[platid]) throw new Error("no platform " + platid);
     var platform = new emu.PLATFORMS[platid](emudiv);
     await platform.start();
@@ -124,6 +124,7 @@ async function testPlatform(platid, romname, maxframes, callback) {
     assert.ok(platform.saveState()); // can save before ROM load?
     var rom = fs.readFileSync('./test/roms/' + platid + '/' + romname);
     rom = new Uint8Array(rom);
+    if (romTransform) romTransform(rom);
     platform.loadROM("ROM", rom);
     var state0a = platform.saveState();
     checkForBigNonTypedArrays(state0a);
@@ -352,6 +353,17 @@ describe('Platform Replay', () => {
       if (frameno == 62) {
         keycallback(Keys.VK_SPACE.c, Keys.VK_SPACE.c, 1);
       }
+    });
+  });
+  it('Should run coleco cart with AA55 signature', async () => {
+    var platform = await testPlatform('coleco', 'shoot.c.rom', 92, (platform, frameno) => {
+      if (frameno == 62) {
+        keycallback(Keys.VK_SPACE.c, Keys.VK_SPACE.c, 1);
+      }
+    }, (rom) => {
+      assert.deepEqual(Array.from(rom.slice(0, 2)), [0x55, 0xaa]);
+      rom[0] = 0xaa; // AA55 means show title screen, but minbios jumps straight in
+      rom[1] = 0x55;
     });
   });
   it('Should run sms-sg1000-libcv', async () => {

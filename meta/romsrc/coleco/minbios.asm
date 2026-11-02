@@ -8,7 +8,7 @@ O		EQU	0FFH		; filler for unused bytes
 
 		ORG	73FFH
 
-Stack:		DS	1		; Default initial stack pointer
+Stack:		resb		1		; Default initial stack pointer
 
 ;***************************************
 ; Cartridge header addresses
@@ -16,21 +16,21 @@ Stack:		DS	1		; Default initial stack pointer
 
 		ORG	8000H
 
-Cart_Sig:	DS	2		; AA55 = title screen, 55AA = no screen
-RamSprtTab:	DS	2		; RAM sprite attribute table pointer
-RAMSprtIdx:	DS	2		; sprite index table pointer
-VDP_Temp:	DS	2		; pointer to temp image storage (up to 40 bytes used)
-CtlState:	DS	2		; pointer to controller state table (2 + 2x5 bytes)
-Cart_Start:	DS	2		; start of cart code
-V_RST_08H:	DS	3		; RST 08H vector
-V_RST_10H:	DS	3		; RST 10H vector
-V_RST_18H:	DS	3		; RST 18H vector
-V_RST_20H:	DS	3		; RST 20H vector
-V_RST_28H:	DS	3		; RST 28H vector
-V_RST_30H:	DS	3		; RST 30H vector
-V_RST_38H:	DS	3		; RST 38H vector
-V_NMI:		DS	3		; NMI vector (vertical blank interrupt)
-Cart_Title:	DS	1		; Title string "LINE 3/LINE 2/yyyy"
+Cart_Sig:	resb	2		; AA55 = title screen, 55AA = no screen
+RamSprtTab:	resb	2		; RAM sprite attribute table pointer
+RAMSprtIdx:	resb	2		; sprite index table pointer
+VDP_Temp:	resb	2		; pointer to temp image storage (up to 40 bytes used)
+CtlState:	resb	2		; pointer to controller state table (2 + 2x5 bytes)
+Cart_Start:	resb	2		; start of cart code
+V_RST_08H:	resb	3		; RST 08H vector
+V_RST_10H:	resb	3		; RST 10H vector
+V_RST_18H:	resb	3		; RST 18H vector
+V_RST_20H:	resb	3		; RST 20H vector
+V_RST_28H:	resb	3		; RST 28H vector
+V_RST_30H:	resb	3		; RST 30H vector
+V_RST_38H:	resb	3		; RST 38H vector
+V_NMI:		resb	3		; NMI vector (vertical blank interrupt)
+Cart_Title:	resb	1		; Title string "LINE 3/LINE 2/yyyy"
 
 ;***************************************
 ; Offsets into data blocks
@@ -148,16 +148,24 @@ A006C:		DW	Font_0		; this points to the font bitmap for '0'
 ;
 ;***************************************
 ColdStart:
-		LD	HL,(Cart_Sig)	; Check first word of cart for 55AAH
-		LD	A,L		;   8000=55H and 8001=AAH
-		CP	55H
-		JR	NZ,NoCart
+		LD	HL,(Cart_Sig)	; Check first word of cart
+		LD	A,L
+		CP	55H		; 55AAH = no title screen
+		JR	NZ,CheckAA55
 		LD	A,H
 		CP	0AAH
+		JR	Z,CartJump
+		JR	NoCart
+CheckAA55:
+		CP	0AAH		; AA55H = title screen (not shown here)
 		JR	NZ,NoCart
-		LD	HL,(Cart_Start)	; If 55H/AAH, jump into cartridge
+		LD	A,H
+		CP	55H
+		JR	NZ,NoCart
+CartJump:
+		LD	HL,(Cart_Start)	; jump into cartridge
 		JP	(HL)
-;TODO
+;TODO: show a title / no-cartridge screen
 NoCart:
 		RST 0
 

@@ -54,6 +54,12 @@ cd meta/romsrc/coleco
 make            # runs naken_asm and copies to mame/roms/coleco/
 ```
 
+The non-MAME ColecoVision emulator carries its own copy of this ROM,
+compressed with [liblzg](https://github.com/mbitsnbites/liblzg), in the
+`COLECO_BIOS_LZG` constant in `src/machine/coleco.ts`. After changing
+the source, regenerate it with `lzg -9` and re-encode the result as
+base64; `lzgmini()` in `src/common/util.ts` decodes it at run time.
+
 ## Regenerating / replacing
 
 The Atari images can be rebuilt from the Altirra source (MADS
