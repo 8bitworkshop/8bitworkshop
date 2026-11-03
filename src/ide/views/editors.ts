@@ -31,6 +31,7 @@ import { createIncludeLinkPlugin } from "./includedecorations";
 import { isMobileDevice, ProjectView } from "./baseviews";
 import { Shortcut } from "../shortcutbar";
 import { createTextTransformFilterEffect, textTransformFilterCompartment } from "./filters";
+import { debugGutterExtensions, clearDebugLine, showDebugLine, syncBreakpointMarkers } from "./debugline";
 import { breakpointMarkers, bytes, clock, currentPcMarker, errorMarkers, ErrorInfo, offset, statusMarkers } from "./gutter";
 import { currentPc, errorMessages, errorSpans, highlightLines, showValue, tracedLines } from "./visuals";
 import { computeHeatLevels } from "./traceheat";
@@ -296,8 +297,6 @@ export class SourceEditor implements ProjectView {
         editorTheme,
         lineWrap ? EditorView.lineWrapping : [],
 
-        currentPc.field,
-
         !minimalGutters ? [
           offset.field,
           offset.gutter,
@@ -311,8 +310,7 @@ export class SourceEditor implements ProjectView {
           clock.gutter,
         ] : [],
 
-        breakpointMarkers.field,
-        statusMarkers.gutter,
+        debugGutterExtensions,
 
         EditorView.updateListener.of(update => {
           for (let effect of update.transactions.flatMap(tr => tr.effects)) {
@@ -332,14 +330,9 @@ export class SourceEditor implements ProjectView {
           }
         }),
 
-        errorMarkers.field,
-
         errorMessages.field,
 
         errorSpans.field,
-
-        currentPcMarker.field,
-        currentPcMarker.gutter,
 
         highlightLines.field,
 
@@ -642,35 +635,13 @@ export class SourceEditor implements ProjectView {
   }
 
   setCurrentLine(line: SourceLocation, moveCursor: boolean) {
-    var addCurrentMarker = (line: SourceLocation) => {
-      this.editor.dispatch({
-        effects: [
-          currentPcMarker.set.of(line.line),
-          // Follow the execution point when stepping/hitting breakpoints. A
-          // passive halt (e.g. the program ends while the user is typing) only
-          // shows the gutter arrow, so it doesn't repaint/highlight the line
-          // out from under the user's cursor.
-          currentPc.effect.of(moveCursor ? line.line : null),
-          ...(moveCursor ? [EditorView.scrollIntoView(this.editor.state.doc.line(line.line).from, { y: "center" })] : []),
-        ]
-      });
-    }
-
     this.clearCurrentLine(moveCursor);
     if (line) {
       // Validate line number is within document range (TODO: open disassembler)
       if (line.line < 1 || line.line > this.editor.state.doc.lines) {
         return;
       }
-      addCurrentMarker(line);
-      if (moveCursor) {
-        const targetLine = this.editor.state.doc.line(line.line);
-        const pos = targetLine.from + (line.start || 0);
-        this.editor.dispatch({
-          selection: { anchor: pos, head: pos },
-          effects: EditorView.scrollIntoView(pos, { y: "center" })
-        });
-      }
+      showDebugLine(this.editor, line, moveCursor);
       this.currentDebugLine = line;
     }
   }
@@ -683,12 +654,7 @@ export class SourceEditor implements ProjectView {
       }
       this.currentDebugLine = null;
     }
-    this.editor.dispatch({
-      effects: [
-        currentPcMarker.set.of(null),
-        currentPc.effect.of(null),
-      ]
-    });
+    clearDebugLine(this.editor);
   }
 
   getActiveLine(): SourceLocation {
@@ -786,9 +752,7 @@ export class SourceEditor implements ProjectView {
 
   // push the store's breakpoints for this file into the gutter markers
   syncBreakpoints() {
-    const markers = bpStore.getSourceBreakpointsForFile(this.path)
-      .map(bp => ({ line: bp.line, enabled: bp.enabled }));
-    this.editor.dispatch({ effects: breakpointMarkers.setAll.of(markers) });
+    syncBreakpointMarkers(this.editor, this.path);
   }
 }
 
@@ -1198,6 +1162,11 @@ export class HeaderView implements ProjectView {
   languageCompartment = new Compartment();
   sourcefile: SourceFile;
   dirtylisting = true;
+  currentDebugLine: SourceLocation;
+  // The text arrives asynchronously, and replacing it resets the scroll, so a
+  // request to reveal the PC line made before it arrives is kept until then.
+  textLoaded = false;
+  pendingReveal = false;
 
   constructor(public fn?: string) {
   }
@@ -1230,9 +1199,15 @@ export class HeaderView implements ProjectView {
         // offsets for the lines that the build actually compiled
         offset.field,
         offset.gutter,
+        // breakpoints and the debugger's current line, as in SourceEditor
+        // (a urust rs8 module is code the user steps into)
+        debugGutterExtensions,
         EditorState.readOnly.of(true),
         EditorView.updateListener.of(update => {
           for (let effect of update.transactions.flatMap(tr => tr.effects)) {
+            if (effect.is(breakpointMarkers.requestToggle) && this.currentPath) {
+              bpStore.toggleSourceLine(this.currentPath, effect.value);
+            }
             if (effect.is(currentPcMarker.runToLine)) {
               const pc = this.sourcefile && this.sourcefile.line2offset.get(effect.value);
               if (pc >= 0) runToPC([pc]);
@@ -1253,14 +1228,27 @@ export class HeaderView implements ProjectView {
   setHeaderText(text: string) {
     // (re)configure highlighting now that we know the actual path
     var lang = getLanguageForFilename(this.currentPath || this.fn || '') || getDefaultLanguageParser();
+    // refresh() reloads the file every time; leave an identical document alone
+    // so its scroll position and markers survive
+    if (this.textLoaded && text === this.view.state.doc.toString()) {
+      this.refreshListing();
+      this.syncBreakpoints();
+      this.refreshDebugState(false);
+      return;
+    }
     this.view.dispatch({
       effects: this.languageCompartment.reconfigure(lang),
       changes: { from: 0, to: this.view.state.doc.length, insert: text }
     });
+    this.textLoaded = true;
     // replacing the whole document drops the gutter markers, so they have to
     // be applied again even if the listing itself is unchanged
     this.dirtylisting = true;
     this.refreshListing();
+    this.syncBreakpoints();
+    this.currentDebugLine = null; // the new document has no marker yet
+    this.refreshDebugState(this.pendingReveal);
+    this.pendingReveal = false;
   }
 
   // show the listing's code offsets for this header, when the build produced
@@ -1278,6 +1266,37 @@ export class HeaderView implements ProjectView {
     this.dirtylisting = false;
   }
 
+  // push the store's breakpoints for this file into the gutter markers
+  syncBreakpoints() {
+    if (!this.view || !this.currentPath) return;
+    syncBreakpointMarkers(this.view, this.currentPath);
+  }
+
+  // mark the line the CPU is stopped at (yellow arrow, purple bar), if it is
+  // in this file; same rules as SourceEditor.refreshDebugState
+  refreshDebugState(moveCursor: boolean) {
+    if (!this.view) return;
+    if (!this.textLoaded) {
+      this.pendingReveal = this.pendingReveal || moveCursor;
+      return;
+    }
+    var line: SourceLocation = null;
+    var cpustate = lastDebugState && lastDebugState.c;
+    if (!cpustate && platform.getCPUState && !platform.isRunning()) cpustate = platform.getCPUState();
+    if (this.sourcefile && cpustate) {
+      line = this.sourcefile.findLineForOffset(cpustate.EPC || cpustate.PC, PC_LINE_LOOKAHEAD);
+    }
+    if (line && (line.line < 1 || line.line > this.view.state.doc.lines)) line = null;
+    if (!moveCursor && (line === this.currentDebugLine || (!line && !this.currentDebugLine))) return;
+    this.currentDebugLine = line;
+    if (line) showDebugLine(this.view, line, moveCursor);
+    else clearDebugLine(this.view);
+  }
+
+  tick() {
+    this.refreshDebugState(false);
+  }
+
   refresh(moveCursor: boolean) {
     var fn = this.fn;
     if (!fn) {
@@ -1288,6 +1307,7 @@ export class HeaderView implements ProjectView {
     }
     this.loadIncludeFile(fn);
     this.refreshListing();
+    this.refreshDebugState(moveCursor);
   }
 
   async loadIncludeFile(fn: string) {

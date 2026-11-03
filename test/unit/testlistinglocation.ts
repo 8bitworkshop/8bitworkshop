@@ -49,6 +49,22 @@ describe('findListingLocation', function () {
     assert.strictEqual(loc.line, 1);
   });
 
+  it('uses a header window for a listing that is not a project file (urust rs8 module)', function () {
+    const ctx = makeContext({
+      listings: {
+        'main.rs': { lines: [], sourcefile: makeFile([{ line: 3, offset: 0x8000 }]) } as any,
+        'rs8/gfx/span.rs': { lines: [], sourcefile: makeFile([{ line: 40, offset: 0x8100 }]) } as any,
+      },
+      // a project window named span.rs must not capture the module's lines
+      findWindowWithFilePrefix: (fn) => fn.startsWith('rs8/gfx/span') ? 'span.rs' : fn,
+      headerWindowFor: (fn) => fn.startsWith('rs8/') ? '#headerview/' + fn.substring(4) : null,
+      isWindow: (id) => id != 'span.rs',
+    });
+    const loc = findListingLocation(0x8102, ctx, LOOKAHEAD);
+    assert.deepStrictEqual(loc, { wndid: '#headerview/gfx/span.rs', line: 40 });
+    assert.strictEqual(findListingLocation(0x8001, ctx, LOOKAHEAD).wndid, 'main.rs');
+  });
+
   it('prefers the assembly listing over the source file when both are present', function () {
     const ctx = makeContext({
       listings: {

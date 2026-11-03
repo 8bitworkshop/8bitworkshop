@@ -196,6 +196,11 @@ export function processListings(listings: CodeListingMap) {
 // look up the per-source-file view (see processListings) for `path`
 export function findSourceFileForPath(lst: CodeListing, path: string): SourceFile {
   if (!lst || !lst.sourcefiles) return null;
+  // a path that ends the same way wins (urust's rs8/console.rs vs
+  // rs8/apple2/console.rs), before the bare filename is compared
+  for (var p in lst.sourcefiles) {
+    if (p == path || p.endsWith('/' + path)) return lst.sourcefiles[p];
+  }
   var want = getFilenameForPath(getFilenamePrefix(path));
   for (var p in lst.sourcefiles) {
     if (getFilenameForPath(getFilenamePrefix(p)) == want) return lst.sourcefiles[p];
@@ -217,6 +222,10 @@ export function getListingForFile(listings: CodeListingMap, path: string, mainPa
   var fnprefix = getFilenamePrefix(stripped);
   for (var lstfn in listings) {
     if (lstfn == path || lstfn == stripped)
+      return withSourceFileForPath(listings[lstfn], stripped);
+  }
+  for (var lstfn in listings) {
+    if (lstfn.endsWith('/' + stripped)) // e.g. a urust header `gfx/span.rs` for rs8/gfx/span.rs
       return withSourceFileForPath(listings[lstfn], stripped);
   }
   for (var lstfn in listings) {

@@ -328,12 +328,26 @@ function newDropdownListItem(id, text) {
 // entry (alongside the listings) so it shows in the window list.
 var openHeaderViews: string[] = [];
 
-export function openHeaderFile(fn: string) {
+function registerHeaderView(fn: string) {
   if (!openHeaderViews.includes(fn)) {
     openHeaderViews.push(fn);
     projectWindows.setCreateFunc('#headerview/' + fn, () => new HeaderView(fn));
     refreshWindowList();
   }
+}
+
+// urust's debug info names the embedded rs8 modules `rs8/<module>.rs`; the
+// editor opens them as `<module>.rs` (see the tool's includeDirs). The debugger
+// needs their window to show a stop or a breakpoint inside one.
+function headerWindowForListing(lstfn: string): string | null {
+  if (!lstfn.startsWith('rs8/') || current_project.getFile(lstfn) != null) return null;
+  var fn = lstfn.substring('rs8/'.length);
+  registerHeaderView(fn);
+  return '#headerview/' + fn;
+}
+
+export function openHeaderFile(fn: string) {
+  registerHeaderView(fn);
   var hash = '#headerview/' + fn;
   if (window.location.hash !== hash) {
     window.location.hash = hash.substring(1);
@@ -1370,6 +1384,7 @@ function findListingLocation(pc: number): { wndid: string, line: number } | null
     filename2path: current_project.filename2path,
     isWindow: (id) => projectWindows.isWindow(id),
     findWindowWithFilePrefix: (fn) => projectWindows.findWindowWithFilePrefix(fn),
+    headerWindowFor: headerWindowForListing,
     symbolAddrs: platform.debugSymbols && platform.debugSymbols.symbolAddrs,
   }, PC_LINE_LOOKAHEAD);
 }
@@ -1623,7 +1638,7 @@ export function armBreakpoints(): boolean {
 function syncEditorBreakpoints() {
   for (var id in projectWindows.id2window) {
     var wnd = projectWindows.id2window[id];
-    if (wnd instanceof SourceEditor) {
+    if (wnd instanceof SourceEditor || wnd instanceof HeaderView) {
       try { wnd.syncBreakpoints(); } catch (e) { }
     }
   }

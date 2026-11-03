@@ -16,6 +16,9 @@ export interface ListingLocationContext {
   // "known window id" (registered), not "currently open" -- see ProjectWindows.isWindow
   isWindow: (id: string) => boolean;
   findWindowWithFilePrefix: (filename: string) => string | null;
+  // a read-only window for a listing whose source is not a project file (a
+  // urust rs8 module), registering it if need be; null if there is none
+  headerWindowFor?: (listingPath: string) => string | null;
   // sorted symbol addresses: a PC inside a library routine (which has no
   // listing) must not fall back to the last line of the routine before it
   symbolAddrs?: number[];
@@ -40,7 +43,11 @@ export function findListingLocation(pc: number, ctx: ListingLocationContext, loo
       let file = lst.assemblyfile || lst.sourcefile;
       // pick either listing or source file
       let wndid = ctx.filename2path[lstfn] || lstfn;
-      if (file == lst.sourcefile) wndid = ctx.findWindowWithFilePrefix(lstfn);
+      if (file == lst.sourcefile) {
+        // checked first: a prefix match would take rs8/gfx/span.rs for any
+        // project file named span.rs
+        wndid = (ctx.headerWindowFor && ctx.headerWindowFor(lstfn)) || ctx.findWindowWithFilePrefix(lstfn);
+      }
       // does this window exist?
       if (wndid && ctx.isWindow(wndid)) {
         // find the source line at the PC or closely before it. A null result

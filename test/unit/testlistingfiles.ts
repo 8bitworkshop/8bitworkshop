@@ -67,4 +67,15 @@ describe('CodeProject.getListingForFile', function () {
         assert.strictEqual(proj.getListingForFile('nes/util.rs')?.sourcefile.line2offset.get(70), 0xc100);
     });
 
+    // rs8/console.rs and rs8/apple2/console.rs share a filename
+    it('tells library modules with the same filename apart', function () {
+        const proj = makeProject('main.rs');
+        proj.processBuildListings({ listings: {
+            'rs8/console.rs': { lines: [{ line: 1, path: 'rs8/console.rs', offset: 0xc000, iscode: true }] },
+            'rs8/apple2/console.rs': { lines: [{ line: 1, path: 'rs8/apple2/console.rs', offset: 0xc200, iscode: true }] },
+        } } as any);
+        assert.strictEqual(proj.getListingForFile('console.rs')?.sourcefile.line2offset.get(1), 0xc000);
+        assert.strictEqual(proj.getListingForFile('apple2/console.rs')?.sourcefile.line2offset.get(1), 0xc200);
+    });
+
 });
