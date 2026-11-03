@@ -95,6 +95,34 @@ body {
 #controls_dynamic > #preset_select {
   flex:0 1 auto;
   min-width:0;
+  max-width:20em;
+}
+/* large screens: hold the picker at one width so a shorter or longer option
+   list doesn't resize it */
+@media (min-width:992px) {
+  #controls_dynamic > #preset_select {
+    flex:0 0 20em;
+    width:20em;
+    max-width:20em;
+  }
+}
+#controls_dynamic > #preset_filter_menu {
+  flex:0 0 auto;
+}
+#preset_filter_menu .toolbarMenuButton {
+  margin-left:0.2em;
+  margin-right:0;
+}
+#presetFilterButton .glyphicon-filter {
+  vertical-align:center;
+}
+/* the filter button changes color while the picker is narrowed */
+#presetFilterButton.filtering {
+  color:#ffcc66;
+}
+#presetFilterList {
+  max-height:70vh;
+  overflow-y:auto;
 }
 #notebook {
   position:relative;

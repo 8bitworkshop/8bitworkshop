@@ -14,6 +14,10 @@ This reloads the IDE with the appropriate emulator and toolchain.
 
 Each platform has several example programs that you can view and edit.
 Use the **Project Selector** drop-down (next to the menu icon) to choose one.
+On large screens the **filter button** beside it opens a menu that narrows
+the list to one example category, or to **Local Files** or **Repositories**
+if there are any; **All** shows everything. While a filter is active, the
+top of the project list says **Filtering by ...**.
 
 ## Editing files
 

@@ -19,7 +19,7 @@ const APPLE2_PRESETS: Preset[] = [
   { id: 'farmhouse.c', name: "Farmhouse Adventure" },
   { id: 'yum.c', name: "Yum Dice Game" },
   { id: 'lz4test.c', name: "LZ4 Decompressor" },
-  { id: 'hgrtest.a', name: "HGR Test", category: "Assembly Language" },
+  { id: 'hgrtest.a', name: "HGR Test", category: "Assembly" },
   { id: 'conway.a', name: "Conway's Game of Life" },
   { id: 'lz4fh.a', name: "LZ4FH Decompressor" },
   { id: 'deltamod.dasm', name: "Delta Modulation Audio" },

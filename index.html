@@ -220,8 +220,15 @@ body {
 
   <!-- project selector -->
   <span id="repo_name" class="hidden-sm" style="color:#eee; font-size: small"></span>
-  <select id="preset_select" name="" title="Project Select" style="max-width:20em;visibility:hidden;height:2.3em">
+  <select id="preset_select" name="" title="Project Select" style="visibility:hidden;height:2.3em">
   </select>
+  <span class="dropdown hidden-md hidden-sm hidden-xs" id="preset_filter_menu">
+    <a class="btn dropdown-toggle toolbarMenuButton" id="presetFilterButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Filter Projects">
+      <span class="glyphicon glyphicon-filter" aria-hidden="true"></span>
+      <span class="caret"></span>
+    </a>
+    <ul class="dropdown-menu dropdown-menu-left" aria-labelledby="presetFilterButton" id="presetFilterList"></ul>
+  </span>
 
   <img id="compile_spinner" src="images/spinner.gif">
 
@@ -242,10 +249,10 @@ body {
   <span style="margin:auto"></span>
 
   <!-- 8bitworkshop logo -->
-  <span class="logo-gradient hidden-sm" onclick="window.open('https://8bitworkshop.com/','_8bitws');">8bitworkshop</span>
+  <span class="logo-gradient hidden-md hidden-sm" onclick="window.open('https://8bitworkshop.com/','_8bitws');">8bitworkshop</span>
 
   <!-- BOOKS menu -->
-  <span class="dropdown hidden-xs" id="books-menu">
+  <span class="dropdown hidden-sm hidden-xs" id="books-menu">
     <a class="btn dropdown-toggle toolbarMenuButton" id="booksMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
       <span class="glyphicon glyphicon-book" aria-hidden="true"></span>
       Books <span class="caret"></span>

@@ -44,6 +44,8 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 
 ### Editor and UI
 
+- On large screens a small **filter button** next to the Project Selector opens a menu that narrows its examples to one category, or to **Local Files** or **Repositories** when the platform has them (**All** shows everything). While a filter is active the button turns amber and the top of the project list says **Filtering by ...**. The picker holds a fixed width there, so changing the filter or its options doesn't resize it. The choice is remembered per platform; on smaller screens the menu is hidden and the full list is shown.
+
 - Clicking the link on an urust `use rs8::nes::util::…` line now opens the child module (`nes/util.rs`) instead of the parent `nes.rs`. A `use` of a child module resolves to its own file, while an item of the parent (`rs8::nes::PPUCTRL`, `rs8::math::sin`) still opens the module; the bundled sources now include the `rs8/<module>/` subdirectories, and a test keeps the child list in step with what the package ships.
 
 - The toolbar has a **Mute/Unmute** button, and clicking the emulator screen still unlocks audio for the browser's autoplay policy (an explicit mute stays muted). Either click counts as the user gesture browsers require to start audio. Platforms that render through TSS `MasterAudio` (vector games, Vectrex, Williams, the Apple II Mockingboard) now use the same `SampleAudio` graph as the rest, so they share its autoplay unlock and mute handling instead of creating a second `AudioContext`. Javatari's own speaker is wired to the same button too.

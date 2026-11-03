@@ -25,6 +25,7 @@ import { openSettings, loadSettings } from "./settings";
 import { getPersistStatusMessage, getQuotaExceededMessage, requestPersistentStorage } from "./storage";
 import { CodeProject, createNewPersistentStore, LocalForageFilesystem, OverlayFilesystem, ProjectFilesystem, WebPresetsFileSystem } from "./project";
 import { getRepos, parseGithubURL } from "./services";
+import { getPresetFilters, getPresetFilterLabel, resolvePresetFilter, PresetFilter, PRESET_FILTER_ALL, PRESET_FILTER_LOCAL_FILES, PRESET_FILTER_REPOSITORIES } from "./presetfilter";
 import { _downloadAllFilesZipFile, _downloadCassetteFile, _downloadProjectZipFile, _downloadROMImage, _downloadSourceFile, _downloadSymFile, _getCassetteFunction, _recordVideo, _shareEmbedLink } from "./shareexport";
 import { _importProjectFromGithub, _loginToGithub, _logoutOfGithub, _publishProjectToGithub, _pullProjectFromGithub, _pushProjectToGithub, _removeRepository, importProjectFromGithub } from "./sync";
 import { Toolbar } from "./toolbar";
@@ -99,6 +100,7 @@ var tabPausedEmulator = false;	// did a tab switch (mobile tab mode) pause the e
 var debugSessionActive: boolean;	// has the user entered a debug session? (drives debug shortcut chips)
 var current_output: any;     // current ROM (or other object)
 var current_preset: Preset;	// current preset object (if selected)
+var selectedPresetFilter: string;	// category filter for the project selector
 var store: LocalForage;			// persistent store
 
 const isElectron = parseBool(qs.electron);
@@ -173,6 +175,12 @@ class UserPrefs {
   }
   getLastPreset() {
     return hasLocalStorage && !isEmbed && localStorage.getItem("__lastid_" + store_id);
+  }
+  setPresetFilter(id: string) {
+    if (hasLocalStorage && !isEmbed) localStorage.setItem("__presetfilter_" + platform_id, id);
+  }
+  getPresetFilter() {
+    return hasLocalStorage && !isEmbed && localStorage.getItem("__presetfilter_" + platform_id);
   }
   getLastPlatformID() {
     return hasLocalStorage && !isEmbed && localStorage.getItem("__lastplatform");
@@ -883,15 +891,19 @@ function _renameFile(e) {
 
 
 
-function populateExamples(sel) {
+function populateExamples(sel, filter: string, groupLabel: string) {
   let files = {};
   let optgroup;
   const PRESETS = platform.getPresets ? platform.getPresets() : [];
   for (var i = 0; i < PRESETS.length; i++) {
     var preset = PRESETS[i];
+    if (filter != PRESET_FILTER_ALL && preset.category != filter) continue;
     var name = preset.chapter ? (preset.chapter + ". " + preset.name) : preset.name;
     var isCurrentPreset = preset.id == current_project.mainPath;
-    if (preset.category) {
+    if (groupLabel) {
+      // a filter shows one group, labelled with the filter
+      if (!optgroup) optgroup = $("<optgroup />").attr('label', groupLabel).appendTo(sel);
+    } else if (preset.category) {
       optgroup = $("<optgroup />").attr('label', 'Examples: ' + preset.category).appendTo(sel);
     } else if (!optgroup) {
       optgroup = $("<optgroup />").attr('label', 'Examples').appendTo(sel);
@@ -903,25 +915,32 @@ function populateExamples(sel) {
   return files;
 }
 
-function populateRepos(sel) {
+function getPlatformRepos() {
+  const repos = [];
   if (hasLocalStorage && !isElectron) {
-    var n = 0;
-    var repos = getRepos();
-    if (repos) {
-      let optgroup = $("<optgroup />").attr('label', 'Repositories').appendTo(sel);
-      for (let repopath in repos) {
-        var repo = repos[repopath];
+    var allrepos = getRepos();
+    if (allrepos) {
+      for (let repopath in allrepos) {
+        var repo = allrepos[repopath];
         if (repo.platform_id && getBasePlatform(repo.platform_id) == getBasePlatform(platform_id)) {
-          optgroup.append($("<option />").val(repo.url).text(repo.url.substring(repo.url.indexOf('/'))));
+          repos.push({ id: repo.url, label: repo.url.substring(repo.url.indexOf('/')) });
         }
       }
     }
   }
+  return repos;
 }
 
-async function populateFiles(sel: JQuery, category: string, prefix: string, foundFiles: {}) {
-  let keys = await store.keys();
-  if (!keys) keys = [];
+function populateRepos(sel: JQuery, repos, label: string) {
+  if (repos.length) {
+    let optgroup = $("<optgroup />").attr('label', label).appendTo(sel);
+    for (const repo of repos) {
+      optgroup.append($("<option />").val(repo.id).text(repo.label));
+    }
+  }
+}
+
+function populateFiles(sel: JQuery, keys: string[], category: string, prefix: string, foundFiles: {}) {
   let optgroup;
   for (var i = 0; i < keys.length; i++) {
     let key = keys[i];
@@ -942,19 +961,92 @@ function finishSelector(sel) {
   }
 }
 
+// Keep in step with the filter menu's hidden-md/hidden-sm/hidden-xs classes in
+// index.html: the menu is only there on very large screens.
+const PRESET_FILTER_MIN_WIDTH = 1200;
+
+function isPresetFilterAvailable(): boolean {
+  return typeof window === 'undefined' || !window.matchMedia
+    || window.matchMedia('(min-width:' + PRESET_FILTER_MIN_WIDTH + 'px)').matches;
+}
+
+function updatePresetFilterMenu(filters: PresetFilter[], selected: string) {
+  const menu = $("#preset_filter_menu");
+  const button = $("#presetFilterButton");
+  if (filters.length <= 1) {
+    menu.hide();
+    button.removeClass("filtering");
+    return;
+  }
+  menu.show();
+  const filtering = selected != PRESET_FILTER_ALL;
+  button.toggleClass("filtering", filtering)
+    .attr('title', filtering ? 'Filter Projects (Filtering by ' + getPresetFilterLabel(filters, selected) + ')' : 'Filter Projects');
+  const ul = $("#presetFilterList").empty();
+  for (const filter of filters) {
+    const link = $('<a class="dropdown-item" href="javascript:void(0)">')
+      .text(filter.label)
+      .attr('data-preset-filter', filter.key)
+      .on('click', (e) => {
+        e.preventDefault();
+        selectPresetFilter(filter.key);
+      });
+    if (filter.key == selected) link.addClass("dropdown-item-checked");
+    ul.append($('<li>').append(link));
+  }
+}
+
+function selectPresetFilter(key: string) {
+  selectedPresetFilter = key;
+  userPrefs.setPresetFilter(key);
+  updateSelector();
+}
+
 async function updateSelector() {
   var sel = $("#preset_select").empty();
+  const PRESETS = platform.getPresets ? platform.getPresets() : [];
+  current_preset = PRESETS.find(preset => preset.id == current_project.mainPath);
   if (!repo_id) {
-    // normal: populate repos, examples, and local files
-    populateRepos(sel);
-    var foundFiles = populateExamples(sel);
-    await populateFiles(sel, "Local Files", "", foundFiles);
+    // normal: populate repos, examples, and local files, narrowed by the filter menu
+    const presetIds = new Set(PRESETS.map(preset => preset.id));
+    let keys = await store.keys();
+    if (!keys) keys = [];
+    const localFiles = keys.filter(key => !presetIds.has(key));
+    const repos = getPlatformRepos();
+    if (selectedPresetFilter == null) selectedPresetFilter = userPrefs.getPresetFilter();
+    let filter = PRESET_FILTER_ALL;
+    let filterLabel = "All";
+    if (isPresetFilterAvailable()) {
+      const filters = getPresetFilters(PRESETS, localFiles.length > 0, repos.length > 0);
+      selectedPresetFilter = resolvePresetFilter(filters, selectedPresetFilter);
+      updatePresetFilterMenu(filters, selectedPresetFilter);
+      filter = selectedPresetFilter;
+      filterLabel = getPresetFilterLabel(filters, filter);
+    } else {
+      // the filter menu is hidden here, so don't narrow the picker by an
+      // invisible filter
+      $("#preset_filter_menu").hide();
+    }
+    // when a filter is on, the picker's option list says so at the top
+    const groupLabel = filter == PRESET_FILTER_ALL ? null : 'Filtering by category "' + filterLabel + '"';
+    const all = filter == PRESET_FILTER_ALL;
+    if (all || filter == PRESET_FILTER_REPOSITORIES) {
+      populateRepos(sel, repos, groupLabel || 'Repositories');
+    }
+    let foundFiles = {};
+    if (all || PRESETS.some(preset => preset.category == filter)) {
+      foundFiles = populateExamples(sel, filter, groupLabel);
+    }
+    if (all || filter == PRESET_FILTER_LOCAL_FILES) {
+      populateFiles(sel, localFiles, groupLabel || "Local Files", "", foundFiles);
+    }
     finishSelector(sel);
   } else {
+    $("#preset_filter_menu").hide();
     sel.append($("<option />").val('/').text('Leave Repository'));
     $("#repo_name").text(getFilenameForPath(repo_id) + '/').show();
     // repo: populate all files
-    await populateFiles(sel, repo_id, "", {});
+    await populateFiles(sel, (await store.keys()) || [], repo_id, "", {});
     finishSelector(sel);
   }
   // set click handlers
@@ -2316,6 +2408,18 @@ function addPageFocusHandlers() {
   $(window).on("orientationchange", () => {
     if (platform && platform.resize) setTimeout(platform.resize.bind(platform), 200);
   });
+  if (!isEmbed) {
+    // hide/show the filter with its breakpoint, and drop the narrowing while it
+    // is hidden so the picker never shows an invisible filter
+    var filterAvailable = isPresetFilterAvailable();
+    $(window).on("resize", () => {
+      var available = isPresetFilterAvailable();
+      if (available != filterAvailable) {
+        filterAvailable = available;
+        updateSelector();
+      }
+    });
+  }
 }
 
 // TODO: merge w/ player.html somehow?
@@ -2512,6 +2616,7 @@ async function startPlatform() {
 function hideControlsForEmbed() {
   $('#dropdownMenuButton').hide();
   $('#platformsMenuButton').hide();
+  $('#preset_filter_menu').hide();
   $('#booksMenuButton').hide();
 }
 
