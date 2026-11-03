@@ -113,6 +113,7 @@
     "buildpresets": "NODE_PATH=$(pwd) node gen/tools/buildpresets.js",
     "compatcheck": "NODE_PATH=$(pwd) node gen/tools/compatcheck.js",
     "toolversions": "node gen/tools/toolversions.js",
+    "gen-urustmods": "node scripts/urustmods.mjs",
     "notices": "node scripts/url-licenses.mjs --notices --write",
     "release": "node scripts/release.mjs",
     "doctools": "node gen/tools/doctools.js",

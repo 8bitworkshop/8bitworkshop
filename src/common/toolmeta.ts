@@ -23,6 +23,9 @@
  */
 
 import { getRootBasePlatform } from "./util";
+import { URUST_RS8_CHILDREN, URUST_RS8_MODULES } from "./urustmods";
+
+export { URUST_RS8_CHILDREN, URUST_RS8_MODULES };
 
 export type ToolKind =
   | 'compiler'      // source -> object/output (cc65, sdcc, cmoc, oscar64, ...)
@@ -78,7 +81,8 @@ export interface ServerToolConfig {
 }
 
 export interface ToolIncludePattern {
-  re: RegExp;
+  /** The directive's regex; omitted by a pattern that only provides `scan`. */
+  re?: RegExp;
   group?: number;
   suffix?: string;
   /** rewrite the filename (from `group`, or the last group) before `suffix`.
@@ -89,6 +93,10 @@ export interface ToolIncludePattern {
    *  toolchain filesystem, not the project; used for UI links only,
    *  not for build dependency scanning */
   system?: boolean;
+  /** More filenames than the regex matches, e.g. one per item of a brace
+   *  group. `index` is the item's offset in the text, so the editor can group
+   *  it with its directive; `name` is final (no `suffix`/`transform`). */
+  scan?: (text: string) => { index: number; name: string }[];
 }
 
 export interface ToolMeta {
@@ -270,34 +278,10 @@ export const DIALOG_INCLUDE_PATTERNS: RegExp[] = [
 // keywords (self/super/crate) stay out. urust loads modules itself -- no
 // separate link step is involved.
 const URUST_MOD_PATTERN = /^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/gm;
-// The modules in crates/rs8/src (and the io/host shims) that urust bundles.
-// `rs8::lib` is the crate root, not a module a program can name.
-export const URUST_RS8_MODULES = [
-  'apple2', 'atari8', 'atari7800', 'bcd', 'beeper', 'c64', 'cbm', 'coleco', 'conio',
-  'console', 'containers', 'far', 'fixed', 'font', 'gb', 'host', 'io', 'joy',
-  'key', 'math', 'mem', 'msx', 'nes', 'notes', 'palette', 'rand', 'serial',
-  'text', 'tms9918', 'tone', 'vcs', 'vic20', 'zx',
-];
-// Child modules of those libraries: `rs8::nes::util` is rs8/nes/util.rs, not
-// the parent rs8/nes.rs. Mirrors urust's CHILDREN table in
-// crates/urust-syntax/src/stdmods.rs; test/unit/testurust.ts checks it against
-// the bundled sources.
-export const URUST_RS8_CHILDREN: { [module: string]: string[] } = {
-  apple2: ['console', 'tone', 'util'],
-  atari8: ['console', 'tone', 'util'],
-  atari7800: ['pokey'],
-  c64: ['console', 'tone', 'util'],
-  cbm: ['console', 'regs'],
-  coleco: ['util'],
-  gb: ['tone', 'util'],
-  host: ['console', 'tone'],
-  msx: ['util'],
-  nes: ['console', 'tone', 'util'],
-  tms9918: ['console'],
-  vcs: ['util'],
-  vic20: ['console', 'tone', 'util'],
-  zx: ['console', 'tone', 'util'],
-};
+// The module/child table is generated from the zip the editor can open
+// (scripts/urustmods.mjs -> src/common/urustmods.ts); test/unit/testurust.ts
+// checks it against the zip both ways, so a module urust adds cannot go
+// unlisted. `rs8::lib` is the crate root, not a module a program can name.
 const URUST_RS8_MODULE_PATTERN = new RegExp(
   `\\brs8::(${URUST_RS8_MODULES.join('|')})(?:::([A-Za-z_][A-Za-z0-9_]*))?\\b`, 'g');
 // A `use` names the module (or one of its children) and then the items it
@@ -312,6 +296,55 @@ const URUST_RS8_MODULE: ToolIncludePattern = {
     return child && (URUST_RS8_CHILDREN[name] || []).includes(child) ? name + '/' + child : name;
   },
 };
+
+/**
+ * The modules a `use rs8::{ .. }` group names, with each item's offset in
+ * `text`. One regex match cannot enumerate a group's items, so this walks the
+ * braces (nested groups included) and applies the same rule as the
+ * single-path pattern: `{io, reset}` is `io.rs` (`reset` is an item, not a
+ * module), and `{c64::util, nes::{console, X}}` is `c64/util.rs`,
+ * `nes/console.rs` and `nes.rs` (`X` stays with its module).
+ */
+export function scanRs8UseGroups(text: string): { index: number; name: string }[] {
+  const out: { index: number; name: string }[] = [];
+  const opener = /\brs8::\s*\{/g;
+  let m: RegExpExecArray | null;
+  while ((m = opener.exec(text))) {
+    const open = m.index + m[0].length - 1; // the '{'
+    const end = scanRs8Group(text, open + 1, [], out);
+    opener.lastIndex = Math.max(opener.lastIndex, end);
+  }
+  return out;
+}
+
+/** Walk one `{ .. }` group's items; returns the offset just past its `}`. */
+function scanRs8Group(text: string, i: number, prefix: string[], out: { index: number; name: string }[]): number {
+  let segs: string[] = [];
+  let start = i;
+  const emit = () => {
+    const path = prefix.concat(segs);
+    segs = [];
+    const module = path[0];
+    const child = path[1];
+    if (!module || !URUST_RS8_MODULES.includes(module)) return;
+    const known = child && (URUST_RS8_CHILDREN[module] || []).includes(child);
+    out.push({ index: start, name: known ? module + '/' + child + '.rs' : module + '.rs' });
+  };
+  while (i < text.length) {
+    const c = text[i];
+    if (c === ',') { emit(); i++; start = i; continue; }
+    if (c === '}') { emit(); return i + 1; }
+    if (c === '{') { i = scanRs8Group(text, i + 1, prefix.concat(segs), out); segs = []; start = i; continue; }
+    if (c === '/' || c === '*') { i++; continue; } // `::` slashes, a glob
+    const id = /^[A-Za-z_][A-Za-z0-9_]*/.exec(text.slice(i));
+    if (!id) { i++; continue; }
+    if (!segs.length) start = i;
+    segs.push(id[0]);
+    i += id[0].length;
+  }
+  return i;
+}
+
 export const URUST_INCLUDE_PATTERNS: (RegExp | ToolIncludePattern)[] = [
   /\binclude_(?:bytes|str)!\s*\(\s*"(.+?)"\s*\)/g,
   ...SHARED_RESOURCE_PATTERNS,
@@ -319,6 +352,8 @@ export const URUST_INCLUDE_PATTERNS: (RegExp | ToolIncludePattern)[] = [
   { re: URUST_MOD_PATTERN, suffix: '/mod.rs' },
   URUST_RS8_MODULE,
   { re: /^\s*(?:pub(?:\([^)]*\))?\s+)?use\s+(?!self\b|super\b|crate\b|rs8\b)([A-Za-z_][A-Za-z0-9_]*)\s*::/gm, suffix: '.rs' },
+  // `use rs8::{io, reset};` -- every item of the group, nested groups too
+  { scan: scanRs8UseGroups },
 ];
 
 /** urust's published documentation (an mdBook build). */
@@ -1174,7 +1209,7 @@ export function matchDependencyPatterns(text: string, patterns: (RegExp | ToolIn
   let lines = text.split('\n');
   for (let pat of patterns || []) {
     let p: ToolIncludePattern = pat instanceof RegExp ? { re: pat } : pat;
-    for (let line of lines) {
+    if (p.re) for (let line of lines) {
       let m;
       p.re.lastIndex = 0; // patterns are shared and global, so rewind first
       // matched per line, not over the whole file, so the `^`+`m`+`g`
@@ -1187,6 +1222,10 @@ export function matchDependencyPatterns(text: string, patterns: (RegExp | ToolIn
         files.push(p.suffix ? fn + p.suffix : fn);
       }
     }
+    // A scan enumerates what one match cannot (a brace group's items); its
+    // names are already final paths. One pass over the whole text, since a
+    // group may span lines.
+    if (p.scan) for (let hit of p.scan(text)) files.push(hit.name);
   }
   return files;
 }

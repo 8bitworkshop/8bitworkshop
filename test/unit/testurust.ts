@@ -62,6 +62,23 @@ describe('urust tool', function () {
       ['apple2.rs', 'vic20.rs', 'zx.rs']);
   });
 
+  it('links the modules named in a use brace group', function () {
+    const src = 'use rs8::apple2;\nuse rs8::apple2::util;\n' +
+      'use rs8::gfx::span::*;\nuse rs8::{io, reset};\n';
+    // one regex match cannot list a group's items; scanRs8UseGroups walks
+    // the braces with the generated module/child table
+    assert.deepStrictEqual(matchDependencyPatterns(src, getIncludePatterns('urust')),
+      ['apple2.rs', 'apple2/util.rs', 'gfx/span.rs', 'io.rs']);
+  });
+
+  it('links nested modules inside a brace group', function () {
+    const src = 'use rs8::{c64::util, nes::{console, X}};\n';
+    // c64/util.rs and nes/console.rs are children; X is an item of nes, so
+    // it links to the parent source, the same rule as rs8::nes::X
+    assert.deepStrictEqual(matchDependencyPatterns(src, getIncludePatterns('urust')),
+      ['c64/util.rs', 'nes/console.rs', 'nes.rs']);
+  });
+
   it('exposes the rs8 sources as a WASI filesystem for the editor', function () {
     assert.strictEqual(getSharedFileSystemName('urust', 'devel-6502'), 'wasi:urust-fs.zip');
     assert.deepStrictEqual(getIncludeDirs('urust', 'devel-6502'), ['/rs8']);
@@ -93,12 +110,12 @@ describe('urust tool', function () {
       const nested = /^rs8\/([^/]+)\/([^/]+)\.rs$/.exec(entry);
       if (nested) {
         assert.ok((URUST_RS8_CHILDREN[nested[1]] || []).includes(nested[2]),
-          `unlisted child module ${entry}`);
+          `unlisted child module ${entry}; run \`npm run gen-urustmods\``);
         continue;
       }
       const top = /^rs8\/([^/]+)\.rs$/.exec(entry);
       if (top && top[1] !== 'lib') {
-        assert.ok(URUST_RS8_MODULES.includes(top[1]), `unlisted module ${entry}`);
+        assert.ok(URUST_RS8_MODULES.includes(top[1]), `unlisted module ${entry}; run \`npm run gen-urustmods\``);
       }
     }
   });

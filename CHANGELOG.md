@@ -8,6 +8,8 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 
 ### Builds and tools
 
+- urust's `use rs8::..` module links open the right source again. The editor's module/child table is now generated from `urust-fs.zip` (`npm run gen-urustmods`) instead of kept by hand, so `rs8::gfx`, `rs8::sort` and `rs8::gfx::span` link, and a grouped `use rs8::{io, reset};` gets a link for each module inside the braces (nested groups too). The unit test compares the table to the zip in both directions, so a new module cannot ship unlinked.
+
 - The IDE's Step Over button on urust programs ran one instruction at a time. urust's debug info has one entry per expression, so every instruction counted as a line start; step over now stops only where the source line changes.
 
 - Git hooks in `.githooks/` run the type check before a commit (`npm run tslint`) and the test suite before a push (`npm test`). They print one line while working and only show output on failure, which aborts the commit/push. `make prepare`/`npm run hooks` installs them by pointing `core.hooksPath` at `.githooks`; bypass with `--no-verify`, `SKIP_PRECOMMIT=1`, or `SKIP_PREPUSH=1`. Tag-only and branch-deletion pushes don't run the tests.

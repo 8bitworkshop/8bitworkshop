@@ -54,25 +54,34 @@ export function findIncludeLinks(
     const text = doc.sliceString(from, to);
     for (let pat of patterns) {
       const p: ToolIncludePattern = pat instanceof RegExp ? { re: pat } : pat;
-      p.re.lastIndex = 0; // patterns are shared and global, so rewind first
-      let m;
-      while ((m = p.re.exec(text))) {
-        const matched = m[p.group != null ? p.group : m.length - 1];
-        if (!matched) continue;
-        // let the pattern rewrite the name (urust `rs8::nes::util` ->
-        // `nes/util`) before any implicit extension (e.g. wiz `import "nes"`
-        // -> "nes.wiz"), same as matchDependencyPatterns() does for build deps
-        const name = p.transform ? p.transform(matched, m) : matched;
-        const filename = p.suffix ? name + p.suffix : name;
-        const matchEnd = Math.min(from + m.index + m[0].length, doc.length);
+      const add = (filename: string, keyIndex: number, endIndex: number) => {
+        const matchEnd = Math.min(from + endIndex, doc.length);
         const line = doc.lineAt(matchEnd);
-        const key = line.number + ':' + (from + m.index);
+        const key = line.number + ':' + (from + keyIndex);
         let group = groups.get(key);
         if (!group) {
           group = { line: line.number, candidates: [] };
           groups.set(key, group);
         }
         group.candidates.push({ filename, system: !!p.system });
+      };
+      if (p.re) {
+        p.re.lastIndex = 0; // patterns are shared and global, so rewind first
+        let m;
+        while ((m = p.re.exec(text))) {
+          const matched = m[p.group != null ? p.group : m.length - 1];
+          if (!matched) continue;
+          // let the pattern rewrite the name (urust `rs8::nes::util` ->
+          // `nes/util`) before any implicit extension (e.g. wiz `import "nes"`
+          // -> "nes.wiz"), same as matchDependencyPatterns() does for build deps
+          const name = p.transform ? p.transform(matched, m) : matched;
+          add(p.suffix ? name + p.suffix : name, m.index, m.index + m[0].length);
+        }
+      }
+      // A scan enumerates what one match cannot (the items of
+      // `use rs8::{io, reset}`); its names are already final paths.
+      if (p.scan) {
+        for (const hit of p.scan(text)) add(hit.name, hit.index, hit.index);
       }
     }
   }

@@ -47,6 +47,17 @@ describe('Rust editor support', function () {
       ['nes/util.rs', 'nes.rs']);
   });
 
+  it('shows a badge for each module in a use brace group', function () {
+    const doc = EditorState.create({
+      doc: 'use rs8::apple2;\nuse rs8::apple2::util;\nuse rs8::gfx::span::*;\nuse rs8::{io, reset};\n'
+    }).doc;
+    const ranges = [{ from: 0, to: doc.length }];
+    // `reset` is an item, not a module, so the group has one link
+    assert.deepStrictEqual(
+      findIncludeLinks(doc, ranges, URUST_INCLUDE_PATTERNS).map(l => l.filename),
+      ['apple2.rs', 'apple2/util.rs', 'gfx/span.rs', 'io.rs']);
+  });
+
   it('extracts Rust fn declarations as symbols', function () {
     const records = extractSymbols('fn draw(x: u8) {}\nfn main() {}\n', 'main.rs', 'rust', 'project');
     assert.deepStrictEqual(records.filter(r => r.kind === 'func').map(r => r.name), ['draw', 'main']);
