@@ -273,8 +273,8 @@ const URUST_MOD_PATTERN = /^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0
 // The modules in crates/rs8/src (and the io/host shims) that urust bundles.
 // `rs8::lib` is the crate root, not a module a program can name.
 export const URUST_RS8_MODULES = [
-  'apple2', 'atari8', 'bcd', 'beeper', 'c64', 'cbm', 'coleco', 'conio',
-  'console', 'containers', 'far', 'fixed', 'font', 'host', 'io', 'joy',
+  'apple2', 'atari8', 'atari7800', 'bcd', 'beeper', 'c64', 'cbm', 'coleco', 'conio',
+  'console', 'containers', 'far', 'fixed', 'font', 'gb', 'host', 'io', 'joy',
   'key', 'math', 'mem', 'msx', 'nes', 'notes', 'palette', 'rand', 'serial',
   'text', 'tms9918', 'tone', 'vcs', 'vic20', 'zx',
 ];
@@ -285,9 +285,11 @@ export const URUST_RS8_MODULES = [
 export const URUST_RS8_CHILDREN: { [module: string]: string[] } = {
   apple2: ['console', 'tone', 'util'],
   atari8: ['console', 'tone', 'util'],
+  atari7800: ['pokey'],
   c64: ['console', 'tone', 'util'],
   cbm: ['console', 'regs'],
   coleco: ['util'],
+  gb: ['tone', 'util'],
   host: ['console', 'tone'],
   msx: ['util'],
   nes: ['console', 'tone', 'util'],

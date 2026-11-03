@@ -73,8 +73,13 @@ describe('urust tool', function () {
     if (!fs.existsSync(zipfile)) return this.skip();
     // /rs8/<module>.rs has to resolve for every module the include pattern links
     const zip = await JSZip.loadAsync(fs.readFileSync(zipfile));
-    for (const f of ['lib.rs', 'apple2.rs', 'atari8.rs', 'c64.rs', 'conio.rs', 'io.rs', 'nes.rs', 'rand.rs', 'vcs.rs', 'vic20.rs', 'zx.rs']) {
+    for (const f of ['lib.rs', 'apple2.rs', 'atari8.rs', 'c64.rs', 'conio.rs', 'gb.rs', 'io.rs', 'nes.rs', 'rand.rs', 'vcs.rs', 'vic20.rs', 'zx.rs']) {
       assert.ok(zip.file('rs8/' + f), 'missing rs8/' + f);
+    }
+    // and every module the pattern links has to be in the package too (a
+    // module urust dropped must not linger in URUST_RS8_MODULES)
+    for (const module of URUST_RS8_MODULES) {
+      assert.ok(zip.file(`rs8/${module}.rs`), `missing rs8/${module}.rs`);
     }
     // nested modules too: a link to rs8/nes/util.rs has to find the file
     for (const [module, children] of Object.entries(URUST_RS8_CHILDREN)) {
