@@ -19,7 +19,8 @@ The sidebar lists one entry per file in the project:
   Address**.
 - **Toolchain headers** — clicking the badge next to an `#include` line
   opens the referenced header from the toolchain's bundled include
-  filesystem in a read-only viewer.
+  filesystem in a read-only viewer. Lines that compile to code show
+  their hex offsets in the gutter, as in source files.
 - **Binary files** — binary files open in a read-only hex dump.
 
 ## Gutter

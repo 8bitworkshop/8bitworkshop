@@ -1,9 +1,8 @@
 import { RangeSet, StateEffect, StateField } from "@codemirror/state";
 import { gutter, GutterMarker } from "@codemirror/view";
-import { hex } from "../../common/util";
 import { canUseBreakpoints } from "../breakpoints";
 
-const setOffset = StateEffect.define<Map<number, number>>();
+const setOffset = StateEffect.define<Map<number, string>>();
 const setBytes = StateEffect.define<Map<number, string>>();
 const setClock = StateEffect.define<Map<number, string>>();
 // clicking the gutter only *requests* a toggle; the breakpoint store
@@ -34,7 +33,7 @@ const offsetField = StateField.define<RangeSet<GutterMarker>>({
                 for (let [line, val] of map.entries()) {
                     if (line >= 1 && line <= tr.state.doc.lines) {
                         const pos = tr.state.doc.line(line).from;
-                        ranges.push(new OffsetMarker(hex(val, 4)).range(pos));
+                        ranges.push(new OffsetMarker(val).range(pos));
                     }
                 }
                 value = RangeSet.of(ranges, true);

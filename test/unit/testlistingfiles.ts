@@ -52,4 +52,19 @@ describe('CodeProject.getListingForFile', function () {
         assert.strictEqual(lst.sourcefile.line2offset.get(5), 0x200);
     });
 
+    // the read-only header view asks for the listing of a library module
+    // (urust keys its listings by the module's path)
+    it('finds the listing for a library module opened in the header view', function () {
+        const proj = makeProject('main.rs');
+        proj.processBuildListings({ listings: {
+            'main.rs': { lines: [{ line: 3, path: 'main.rs', offset: 0xc000, iscode: true }] },
+            'rs8/nes/util.rs': { lines: [{ line: 70, path: 'rs8/nes/util.rs', offset: 0xc100, iscode: true }] },
+        } } as any);
+        const lst = proj.getListingForFile('rs8/nes/util.rs');
+        assert.strictEqual(lst.sourcefile.line2offset.get(70), 0xc100);
+        assert.strictEqual(proj.getListingForFile('rs8/nes/nothing.rs'), undefined);
+        // the header view names it relative to the shared filesystem's /rs8
+        assert.strictEqual(proj.getListingForFile('nes/util.rs')?.sourcefile.line2offset.get(70), 0xc100);
+    });
+
 });

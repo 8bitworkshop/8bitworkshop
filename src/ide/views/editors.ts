@@ -105,6 +105,15 @@ function getEditorSelectionText(view: EditorView): string {
   return view.state.sliceDoc(range.from, range.to);
 }
 
+/** Executable line offsets for the gutter, keyed by source line. */
+function sourceLineOffsetMap(sourcefile: SourceFile): Map<number, string> {
+  const offsets = new Map<number, string>();
+  for (var info of (sourcefile && sourcefile.lines) || []) {
+    if (info.offset >= 0) offsets.set(info.line, hex(info.offset & 0xffff, 4));
+  }
+  return offsets;
+}
+
 export class SourceEditor implements ProjectView {
   // Whether to highlight recently-executed lines from live trace data.
   // Off by default (probing has a runtime cost); toggled via toolbar button.
@@ -574,15 +583,12 @@ export class SourceEditor implements ProjectView {
     this.clearErrors();
     var lstlines = this.sourcefile.lines || [];
 
-    const newOffsets = new Map();
+    const newOffsets = sourceLineOffsetMap(this.sourcefile);
     const newBytes = new Map();
     const newClocks = new Map();
 
     for (var info of lstlines) {
       //if (info.path && info.path != this.path) continue;
-      if (info.offset >= 0) {
-        newOffsets.set(info.line, hex(info.offset & 0xffff, 4));
-      }
       if (info.insns) {
         var insnstr = info.insns.length > 9 ? ("...") : info.insns;
         newBytes.set(info.line, insnstr);
@@ -1190,6 +1196,8 @@ export class HeaderView implements ProjectView {
   }
   currentPath: string;
   languageCompartment = new Compartment();
+  sourcefile: SourceFile;
+  dirtylisting = true;
 
   constructor(public fn?: string) {
   }
@@ -1208,15 +1216,32 @@ export class HeaderView implements ProjectView {
         EditorState.allowMultipleSelections.of(true),
         drawSelection(),
         highlightActiveLine(),
+        highlightActiveLineGutter(),
         highlightSelectionMatches(),
+        // line numbers follow the user setting, like SourceEditor; the
+        // offset gutter below is the default view of code in headers
+        ...settingsExtensions(loadSettings()),
+        foldGutter(),
         search({ top: true }),
         keymap.of(ideSearchKeymap),
         this.languageCompartment.of(lang),
         mbo,
         editorTheme,
+        // offsets for the lines that the build actually compiled
+        offset.field,
+        offset.gutter,
         EditorState.readOnly.of(true),
+        EditorView.updateListener.of(update => {
+          for (let effect of update.transactions.flatMap(tr => tr.effects)) {
+            if (effect.is(currentPcMarker.runToLine)) {
+              const pc = this.sourcefile && this.sourcefile.line2offset.get(effect.value);
+              if (pc >= 0) runToPC([pc]);
+            }
+          }
+        }),
       ],
     });
+    registerEditor(this.view);
     this.refresh(false);
     return div;
   }
@@ -1232,6 +1257,25 @@ export class HeaderView implements ProjectView {
       effects: this.languageCompartment.reconfigure(lang),
       changes: { from: 0, to: this.view.state.doc.length, insert: text }
     });
+    // replacing the whole document drops the gutter markers, so they have to
+    // be applied again even if the listing itself is unchanged
+    this.dirtylisting = true;
+    this.refreshListing();
+  }
+
+  // show the listing's code offsets for this header, when the build produced
+  // any (a declarations-only header has none)
+  refreshListing() {
+    if (!this.view || !this.currentPath) return;
+    var lst = current_project.getListingForFile(this.currentPath);
+    var sourcefile = (lst && lst.sourcefile) || null;
+    if (sourcefile !== this.sourcefile) {
+      this.sourcefile = sourcefile;
+      this.dirtylisting = true;
+    }
+    if (!this.dirtylisting) return;
+    this.view.dispatch({ effects: offset.set.of(sourceLineOffsetMap(sourcefile)) });
+    this.dirtylisting = false;
   }
 
   refresh(moveCursor: boolean) {
@@ -1243,6 +1287,7 @@ export class HeaderView implements ProjectView {
       fn = this.fn = decodeURIComponent(hash.substring('#headerview/'.length));
     }
     this.loadIncludeFile(fn);
+    this.refreshListing();
   }
 
   async loadIncludeFile(fn: string) {
