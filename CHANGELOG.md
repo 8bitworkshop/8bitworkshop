@@ -8,6 +8,8 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 
 ### Builds and tools
 
+- The IDE's Step Over button on urust programs ran one instruction at a time. urust's debug info has one entry per expression, so every instruction counted as a line start; step over now stops only where the source line changes.
+
 - Git hooks in `.githooks/` run the type check before a commit (`npm run tslint`) and the test suite before a push (`npm test`). They print one line while working and only show output on failure, which aborts the commit/push. `make prepare`/`npm run hooks` installs them by pointing `core.hooksPath` at `.githooks`; bypass with `--no-verify`, `SKIP_PRECOMMIT=1`, or `SKIP_PREPUSH=1`. Tag-only and branch-deletion pushes don't run the tests.
 
 - **CVBasic** builds BASIC programs for the Colecovision, MSX, SG-1000/SMS and NES. The WASI compiler turns `.bas` into gasm80 assembler, which the newly vendored gasm80 (also WASI) assembles into a cartridge ROM. Compiler and assembler diagnostics point at BASIC lines, and the gasm80 listing gives the debugger source line/address information. Colecovision, MSX, NES and SG-1000/SMS now send `.bas` to it, with presets, skeletons and a `cvbasic-fs.zip` package of its prologue/epilogue files.

@@ -242,3 +242,29 @@ export function mergeSegments(nativeSegs: Segment[], linkerSegs: Segment[]): Seg
   segs.sort((a, b) => a.start - b.start);
   return segs;
 }
+
+/**
+ * The set of PCs that begin a source line, for source-level step over.
+ * Compilers like urust emit one entry per expression, so one source line can
+ * have many entries at consecutive addresses. Only the first entry of each run
+ * (in address order) on the same file+line counts, or step over would stop
+ * after nearly every instruction.
+ */
+export function sourceLineStartPCs(listings: CodeListingMap): Set<number> {
+  var entries: SourceLine[] = [];
+  for (var lstfn in listings || {}) {
+    var sourcefile = listings[lstfn].sourcefile;
+    if (!sourcefile) continue;
+    for (var line of sourcefile.lines) {
+      if (line.offset >= 0) entries.push(line);
+    }
+  }
+  entries.sort((a, b) => a.offset - b.offset);
+  var pcs = new Set<number>();
+  var prev: SourceLine = null;
+  for (var e of entries) {
+    if (!prev || prev.line != e.line || prev.path != e.path) pcs.add(e.offset);
+    prev = e;
+  }
+  return pcs;
+}

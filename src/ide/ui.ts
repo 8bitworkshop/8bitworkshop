@@ -18,6 +18,7 @@ import { getAppVersionLabel } from "../common/version";
 import { PLATFORM_PARAMS } from "../worker/platforms";
 import { hasErrors } from "../worker/listingutils";
 import { CodeListingMap, FileData, WorkerError, WorkerResult, isErrorResult } from "../common/workertypes";
+import { sourceLineStartPCs } from "../common/projectcore";
 import { reportErrorToServer, reportInternalError } from "./errorreport";
 import { importPlatform } from "../platform/_index";
 import { alertError, alertInfo, fatalError, setWaitDialog } from "./dialogs";
@@ -1544,17 +1545,7 @@ var sourcePcsCache: { listings: CodeListingMap, pcs: Set<number> } = null;
 function getSourceLineStartPCs(): Set<number> {
   var listings = current_project.getListings();
   if (!sourcePcsCache || sourcePcsCache.listings !== listings) {
-    var pcs = new Set<number>();
-    if (listings) {
-      for (var lstfn in listings) {
-        var sourcefile = listings[lstfn].sourcefile;
-        if (!sourcefile) continue;
-        for (var line of sourcefile.lines) {
-          if (line.offset >= 0) pcs.add(line.offset);
-        }
-      }
-    }
-    sourcePcsCache = { listings: listings, pcs: pcs };
+    sourcePcsCache = { listings: listings, pcs: sourceLineStartPCs(listings) };
   }
   return sourcePcsCache.pcs;
 }
