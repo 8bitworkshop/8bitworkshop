@@ -41,5 +41,13 @@ default `-O1` build folds most locals into registers or temporaries, and
 those cannot be shown; add `//#flag c -O0` to a program that you want to
 inspect in the debugger.
 
+urust also lists the source-declared globals (`static`, `const`, `reg!`) in
+its debug output, with their type and home address. They are always live, so
+the tree shows a **Globals** node next to **Locals**. Only mutable globals are
+listed: a read-only global (`mutable: false`, such as a `const` or a non-`mut`
+static) stays out. Compiler-made cells (length cells, wide-array lanes) have
+no source type and stay out too; they are still visible as symbols.
+
 Selecting a variable in the editor shows its live value in the same way,
-and `8bws run ... -e "tree Locals"` prints the node from the CLI.
+and `8bws run ... -e "tree Locals"` or `tree Globals` prints the node from the
+CLI.

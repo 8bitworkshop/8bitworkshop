@@ -157,6 +157,9 @@ describe('urust tool', function () {
     variables: [
       { name: 'score', type: 'u16', size: 2, function: 'main', addr: 0x10, range: [0x8000, 0x8014], codeBank: null, file: 'main.rs', line: 1, col: 1 },
     ],
+    globalVariables: [
+      { name: 'hiscore', type: 'u16', size: 2, addr: 0x20, ram: true, mutable: true, bank: null, bankName: null, file: 'main.rs', line: 8, col: 1, expandable: false },
+    ],
   };
 
   it('converts debug info for the debugger and memory map', function () {
@@ -170,6 +173,14 @@ describe('urust tool', function () {
     assert.strictEqual(r.banked, false);
     assert.deepStrictEqual(r.variables, dbg.variables);
     assert.deepStrictEqual(r.debuginfo.sourceVariables, dbg.variables);
+    assert.deepStrictEqual(r.debuginfo.globalVariables, dbg.globalVariables);
+  });
+
+  it('accepts debug output from a build without globals', function () {
+    const old = { ...dbg };
+    delete old.globalVariables;
+    const r = urustDebugToResult(old, ['main.rs']);
+    assert.deepStrictEqual(r.debuginfo.globalVariables, []);
   });
 
   it('flags banked output', function () {

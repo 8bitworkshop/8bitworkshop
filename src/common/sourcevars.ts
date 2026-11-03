@@ -9,6 +9,8 @@
 //
 // A debugger shows only the definitions whose range contains the PC, plus the
 // ones the optimizer folded away (reported as "optimized out", never guessed).
+// Globals (`static`, `const`, `reg!`) are always live, so urust lists them
+// separately in `globalVariables`, with their type and home address.
 
 import { hex } from "./util";
 
@@ -41,10 +43,58 @@ export interface SourceVariable {
   location?: string;
 }
 
+/** A source-declared global: always live, so it has no function or range. */
+export interface GlobalVariable {
+  name: string;
+  /** the type as written in the source: `u8`, `bool`, `[u8; 4]` */
+  type: string;
+  /** its size in bytes */
+  size: number;
+  /** the address of its home */
+  addr: number;
+  /** true when it lives in RAM, false for data in ROM */
+  ram?: boolean;
+  /** false when the program cannot write it (`const`, non-`mut` static) */
+  mutable?: boolean;
+  bank?: number | null;
+  /** the name of the ROM region at `bank`, when the target names one */
+  bankName?: string | null;
+  file?: string | null;
+  /** 1-based declaration position */
+  line?: number | null;
+  col?: number | null;
+  /** an array, whose elements can be read from `addr` */
+  expandable?: boolean;
+}
+
+/** The part of a variable that says where its value is. */
+export interface VariableStorage {
+  type?: string;
+  size?: number;
+  addr?: number | null;
+  /** a zero-page pointer that `addr` is relative to */
+  baseAddr?: number | null;
+}
+
 /** The source variables a build put in `DebugSymbols.debuginfo`, if any. */
 export function sourceVariablesOf(debuginfo: any): SourceVariable[] {
   const vars = debuginfo && debuginfo.sourceVariables;
   return Array.isArray(vars) ? vars : [];
+}
+
+/** The source-declared globals a build put in `DebugSymbols.debuginfo`, if any. */
+export function globalVariablesOf(debuginfo: any): GlobalVariable[] {
+  const vars = debuginfo && debuginfo.globalVariables;
+  return Array.isArray(vars) ? vars : [];
+}
+
+/**
+ * The globals the program can write: `mutable` is false for a read-only
+ * global (`const`, non-`mut` static), which the debugger leaves out. Older
+ * output without the flag keeps the global rather than hiding all of them.
+ */
+export function writableGlobalVariablesOf(debuginfo: any): GlobalVariable[] {
+  return globalVariablesOf(debuginfo).filter(v => v.mutable !== false);
 }
 
 /** Read a byte through the platform's bus, as the debugger sees it. */
@@ -97,7 +147,7 @@ export function liveSourceVariables(vars: SourceVariable[], pc: number,
  * variable (`baseAddr` set) moves as the program calls functions, so the
  * pointer has to be read at every stop instead of being baked into the var.
  */
-export function sourceVariableAddress(v: SourceVariable, read: (addr: number) => number): number | null {
+export function sourceVariableAddress(v: VariableStorage, read: (addr: number) => number): number | null {
   if (v.addr == null) return null;
   if (v.baseAddr == null) return v.addr;
   const addr = (read(v.baseAddr) & 0xff) | ((read(v.baseAddr + 1) & 0xff) << 8);
@@ -126,7 +176,7 @@ function formatBytes(bytes: Uint8Array): string {
  * A source value as a tree leaf: a string for scalars, or a Uint8Array for an
  * array or struct too big to show inline (the Debug Tree splits it into rows).
  */
-export function formatSourceValue(v: SourceVariable, read: (addr: number) => number): string | Uint8Array {
+export function formatSourceValue(v: VariableStorage, read: (addr: number) => number): string | Uint8Array {
   const addr = sourceVariableAddress(v, read);
   if (addr == null) return '<optimized out>';
   // big arrays are shown by their first rows; the tree can chunk the rest
@@ -153,7 +203,7 @@ export function formatSourceValue(v: SourceVariable, read: (addr: number) => num
 }
 
 /** One live variable as `name: type = value` (for the editor's hover text). */
-export function formatSourceVariableLine(v: SourceVariable, read: (addr: number) => number): string {
+export function formatSourceVariableLine(v: VariableStorage & { name: string }, read: (addr: number) => number): string {
   const val = formatSourceValue(v, read);
   let text = `${v.name}: ${v.type} = ${typeof val === 'string' ? val : formatBytes(val)}`;
   if (text.length > 72) text = text.substring(0, 69) + '...';
@@ -161,17 +211,14 @@ export function formatSourceVariableLine(v: SourceVariable, read: (addr: number)
 }
 
 /**
- * The live variables as a Debug Tree object, keyed `name:type` (the type
- * without spaces, so a CLI path can name one). Null when none are live.
+ * The variables as a Debug Tree object, keyed `name:type` (the type without
+ * spaces, so a CLI path can name one).
  */
-export function sourceVariableTree(vars: SourceVariable[], pc: number,
-  symbolmap: { [name: string]: number }, symbolsizes: { [name: string]: number } | undefined,
-  read: (addr: number) => number): { [name: string]: any } | null {
-  const live = liveSourceVariables(vars, pc, symbolmap, symbolsizes);
-  if (!live.length) return null;
+function variablesToTree(vars: (SourceVariable | GlobalVariable)[],
+  read: (addr: number) => number): { [name: string]: any } {
   const tree: { [name: string]: any } = {};
-  live.sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type));
-  for (const v of live) {
+  const sorted = vars.slice().sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type));
+  for (const v of sorted) {
     const type = (v.type || '').replace(/\s+/g, '');
     let key = type ? `${v.name}:${type}` : v.name;
     let n = 2;
@@ -179,4 +226,23 @@ export function sourceVariableTree(vars: SourceVariable[], pc: number,
     tree[key] = formatSourceValue(v, read);
   }
   return tree;
+}
+
+/**
+ * The live variables as a Debug Tree object. Null when none are live.
+ */
+export function sourceVariableTree(vars: SourceVariable[], pc: number,
+  symbolmap: { [name: string]: number }, symbolsizes: { [name: string]: number } | undefined,
+  read: (addr: number) => number): { [name: string]: any } | null {
+  const live = liveSourceVariables(vars, pc, symbolmap, symbolsizes);
+  return live.length ? variablesToTree(live, read) : null;
+}
+
+/**
+ * The globals as a Debug Tree object. Unlike locals they have no live range,
+ * so every one is shown. Null when the build has none.
+ */
+export function globalVariableTree(vars: GlobalVariable[],
+  read: (addr: number) => number): { [name: string]: any } | null {
+  return vars.length ? variablesToTree(vars, read) : null;
 }

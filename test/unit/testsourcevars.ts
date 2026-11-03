@@ -1,8 +1,9 @@
 import assert from "assert";
 import { describe, it } from "mocha";
 import {
-  SourceVariable, formatSourceValue, formatSourceVariableLine, functionAtPC,
-  liveSourceVariables, sourceVariableTree, sourceVariablesOf
+  GlobalVariable, SourceVariable, formatSourceValue, formatSourceVariableLine, functionAtPC,
+  globalVariablesOf, globalVariableTree, liveSourceVariables, sourceVariableTree, sourceVariablesOf,
+  writableGlobalVariablesOf
 } from "../../src/common/sourcevars";
 
 describe('Source variables', function () {
@@ -11,6 +12,8 @@ describe('Source variables', function () {
     0x12: 0xff,             // i8 delta = -1
     0x13: 0x01,             // bool running = true
     0x14: 0x01, 0x15: 0x02, 0x16: 0x03, // [u8; 3]
+    0x30: 0x78, 0x31: 0x56, // global u16 SCORE = 0x5678
+    0x40: 0xaa, 0x41: 0xbb, 0x42: 0xcc, // global [u8; 3] PALETTE
   };
   const read = (a: number) => mem[a] || 0;
   const symbolmap = { main: 0x8000, helper: 0x8100 };
@@ -27,10 +30,28 @@ describe('Source variables', function () {
     { name: 'other', type: 'u8', size: 1, function: 'helper', addr: 0x10, range: null },
   ];
 
+  const globals: GlobalVariable[] = [
+    { name: 'SCORE', type: 'u16', size: 2, addr: 0x30, ram: true, mutable: true, file: 'main.rs', line: 12, col: 1 },
+    { name: 'PALETTE', type: '[u8; 3]', size: 3, addr: 0x40, ram: false, mutable: false, file: 'main.rs', line: 16, col: 1, expandable: true },
+  ];
+
   it('reads the variables out of debuginfo', function () {
     assert.deepStrictEqual(sourceVariablesOf({ sourceVariables: vars }), vars);
     assert.deepStrictEqual(sourceVariablesOf({}), []);
     assert.deepStrictEqual(sourceVariablesOf(null), []);
+    assert.deepStrictEqual(globalVariablesOf({ globalVariables: globals }), globals);
+    assert.deepStrictEqual(globalVariablesOf({}), []);
+    assert.deepStrictEqual(globalVariablesOf(null), []);
+    // mutable says whether the program can write it, regardless of where it lives
+    const readonlyRam = { ...globals[0], name: 'LOCKED', mutable: false };
+    const writableRom = { ...globals[1], name: 'ROMVAR', mutable: true };
+    assert.deepStrictEqual(
+      writableGlobalVariablesOf({ globalVariables: [globals[0], globals[1], readonlyRam, writableRom] }),
+      [globals[0], writableRom]);
+    assert.deepStrictEqual(writableGlobalVariablesOf({}), []);
+    // older output has no mutable flag; keep it rather than hide every global
+    const unmarked = { ...globals[1], ram: false, mutable: undefined };
+    assert.deepStrictEqual(writableGlobalVariablesOf({ globalVariables: [unmarked] }), [unmarked]);
   });
 
   it('finds the function whose code contains the PC', function () {
@@ -70,5 +91,14 @@ describe('Source variables', function () {
       'score:u16': '$1234 (4660)',
     });
     assert.strictEqual(sourceVariableTree(vars, 0x8200, symbolmap, symbolsizes, read), null);
+  });
+
+  it('shows every global, with no live range to filter on', function () {
+    assert.deepStrictEqual(globalVariableTree(globals, read), {
+      'PALETTE:[u8;3]': 'AA BB CC',
+      'SCORE:u16': '$5678 (22136)',
+    });
+    assert.strictEqual(globalVariableTree([], read), null);
+    assert.strictEqual(formatSourceVariableLine(globals[0], read), 'SCORE: u16 = $5678 (22136)');
   });
 });

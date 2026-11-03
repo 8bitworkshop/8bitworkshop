@@ -25,6 +25,8 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 
 - urust programs show their source variables while debugging. The compiler's `--debug-out` JSON already gives each variable's home and the `[from, to)` code range it is live over; the Debug Tree now has a **Locals** node with the values at the current PC (only the live definition is shown, and variables the optimizer kept no storage for say `<optimized out>`). Selecting a variable in the editor shows the same value, and `8bws run ... -e "tree Locals"` prints it from the CLI. The build's debug info now reaches the VS Code debugger too, so its Machine scope has the same node.
 
+- urust's mutable `static` and `reg!` globals show in a **Globals** node in the Debug Tree. The compiler's `--debug-out` now lists them with their type, home address and declaration, separate from the locals that have a live range; the same values appear when hovering a global symbol in the editor. Read-only globals (`mutable: false`, such as a `const` or non-`mut` static) stay out of the node, as do compiler-made cells without a source type; both remain in the symbol table.
+
 - oscar64 C and C++ programs show their source variables too. The compiler's `-g` output includes a `.dbj` with function locals, their types, and the source lines where they are in scope; the build turns that into the same **Locals** node, mapping the scope lines to code ranges and reading stack/frame-relative variables through oscar64's zero-page pointers. Because the default `-O1` build usually keeps locals in registers, add `//#flag c -O0` to a program when you want to inspect them.
 
 ### Emulators

@@ -17,7 +17,7 @@ import { _MOS6502 } from "./cpu/MOS6502";
 import { AcceptsBIOS, AcceptsJoyInput, AcceptsKeyInput, AcceptsPaddleInput, AcceptsROM, Bus, FrameBased, HasCPU, HasSerialIO, Probeable, RasterFrameBased, Resettable, SampledAudioSource, SavesInputState, SavesState, SerialIOInterface, VideoSource } from "./devices";
 import { ProbeRecorder } from "./probe";
 import { BaseWASMMachine } from "./wasmplatform";
-import { formatSourceVariableLine, liveSourceVariables, readSourceByte, sourceVariablesOf, sourceVariableTree } from "./sourcevars";
+import { formatSourceVariableLine, globalVariablesOf, globalVariableTree, liveSourceVariables, readSourceByte, sourceVariablesOf, sourceVariableTree, writableGlobalVariablesOf } from "./sourcevars";
 
 ///
 
@@ -258,10 +258,11 @@ export abstract class BasePlatform {
     var o: any = {};
     o.state = this.saveState();
     if (this.debugSymbols?.debuginfo) {
-      // source variables have their own live view; listing the raw records
-      // here would only show where they are, not what they hold
+      // source variables and globals have their own value views; listing the
+      // raw records here would only show where they are, not what they hold
       const info = { ...this.debugSymbols.debuginfo };
       delete info['sourceVariables'];
+      delete info['globalVariables'];
       if (Object.keys(info).length) o.debuginfo = info;
     }
     return o;
@@ -434,10 +435,21 @@ export abstract class BaseDebugPlatform extends BasePlatform {
       this.debugSymbols.symbolsizes, a => readSourceByte(this, a)) || {};
   }
 
+  /** The writable source-declared globals (`static`, `reg!`) and their
+   *  values, keyed `name:type`; constants in ROM are left out. */
+  getGlobalVariables(): { [name: string]: any } {
+    const vars = writableGlobalVariablesOf(this.debugSymbols?.debuginfo);
+    if (!vars.length) return {};
+    return globalVariableTree(vars, a => readSourceByte(this, a)) || {};
+  }
+
   getDebugTree(): {} {
     const tree: any = super.getDebugTree();
     if (sourceVariablesOf(this.debugSymbols?.debuginfo).length) {
       tree.Locals = { $$: () => this.getSourceVariables() };
+    }
+    if (writableGlobalVariablesOf(this.debugSymbols?.debuginfo).length) {
+      tree.Globals = { $$: () => this.getGlobalVariables() };
     }
     return tree;
   }
@@ -449,6 +461,8 @@ export abstract class BaseDebugPlatform extends BasePlatform {
         this.debugSymbols.symbolsizes).find(v => v.name === sym);
       if (v) return formatSourceVariableLine(v, a => readSourceByte(this, a));
     }
+    const g = globalVariablesOf(this.debugSymbols?.debuginfo).find(g => g.name === sym);
+    if (g) return formatSourceVariableLine(g, a => readSourceByte(this, a));
     return super.inspect(sym);
   }
 

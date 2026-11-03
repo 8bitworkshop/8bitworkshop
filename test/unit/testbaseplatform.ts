@@ -502,6 +502,8 @@ describe('BaseDebugPlatform', function () {
     getSP(): number { return 0x100; }
     getPC(): number { return 0x1000; }
     isStable(): boolean { return true; }
+    mem: { [addr: number]: number } = {};
+    readAddress(addr: number): number { return this.mem[addr] || 0; }
   }
 
   it('should manage breakpoints', function () {
@@ -545,6 +547,30 @@ describe('BaseDebugPlatform', function () {
 
     platform.debugBreakState = { c: { PC: 0 } };
     assert.ok(platform.wasBreakpointHit());
+  });
+
+  it('should show source locals and globals in the debug tree', function () {
+    const platform = new TestDebugPlatform();
+    platform.mem[0x20] = 0x78;
+    platform.mem[0x21] = 0x56;
+    platform.mem[0x30] = 0x34;
+    platform.mem[0x31] = 0x12;
+    platform.debugSymbols = new DebugSymbols({ main: 0x1000, hiscore: 0x20 }, {
+      extra: 'kept',
+      sourceVariables: [
+        { name: 'score', type: 'u16', size: 2, function: 'main', addr: 0x30, range: [0x1000, 0x1010] },
+      ],
+      globalVariables: [
+        { name: 'hiscore', type: 'u16', size: 2, addr: 0x20, ram: true, mutable: true },
+        { name: 'PALETTE', type: '[u8; 3]', size: 3, addr: 0x40, ram: false, mutable: false },
+      ],
+    });
+
+    const tree: any = platform.getDebugTree();
+    assert.deepStrictEqual(tree.debuginfo, { extra: 'kept' });
+    assert.deepStrictEqual(tree.Locals.$$(), { 'score:u16': '$1234 (4660)' });
+    assert.deepStrictEqual(tree.Globals.$$(), { 'hiscore:u16': '$5678 (22136)' });
+    assert.strictEqual(platform.inspect('hiscore'), 'hiscore: u16 = $5678 (22136)');
   });
 });
 

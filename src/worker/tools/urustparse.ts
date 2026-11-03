@@ -3,7 +3,7 @@
 // (src/worker/tools/urust.ts); kept free of worker imports so tests can use it.
 
 import { CodeListingMap, Segment, SourceLine, WorkerError } from "../../common/workertypes";
-import { SourceVariable } from "../../common/sourcevars";
+import { GlobalVariable, SourceVariable } from "../../common/sourcevars";
 import { urustPlatformName } from "../../common/toolmeta";
 
 export { urustPlatformName };
@@ -34,6 +34,8 @@ export interface UrustDebug {
     lines: { addr: number, size: number, bank: number | null, file: string, line: number, col: number, endLine: number, endCol: number, func: string | null }[];
     segments: { name: string, start: number, size: number, bank: number | null, type: 'rom' | 'ram' }[];
     variables?: SourceVariable[];
+    /** source-declared data symbols (`static`, `const`, `reg!`); always live */
+    globalVariables?: GlobalVariable[];
 }
 
 export interface UrustDebugResult {
@@ -44,7 +46,7 @@ export interface UrustDebugResult {
     /** source variables and the code ranges they are live over */
     variables: SourceVariable[];
     /** extra info for DebugSymbols.debuginfo (the debug tree reads it) */
-    debuginfo: { sourceVariables: SourceVariable[] };
+    debuginfo: { sourceVariables: SourceVariable[], globalVariables: GlobalVariable[] };
     /** true if anything lives in a switchable bank: addresses there are
      *  ambiguous to the debugger, which has no bank in its line/symbol tables */
     banked: boolean;
@@ -122,6 +124,10 @@ export function urustDebugToResult(dbg: UrustDebug, paths: string[]): UrustDebug
     }));
     if (dbg.segments.some(g => g.bank != null)) banked = true;
     const variables = dbg.variables || [];
-    return { listings, symbolmap, symbolsizes, segments, variables, debuginfo: { sourceVariables: variables }, banked };
+    const globalVariables = dbg.globalVariables || [];
+    return {
+        listings, symbolmap, symbolsizes, segments, variables, banked,
+        debuginfo: { sourceVariables: variables, globalVariables },
+    };
 }
 
