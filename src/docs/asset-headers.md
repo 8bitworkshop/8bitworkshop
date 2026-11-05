@@ -129,7 +129,7 @@ everything else falls back to a sensible default.
 | `remap` | — | Bit permutation applied to the word offset |
 | `reindex` | — | Per-column word/bit table |
 | `aspect` | `1` | Pixel aspect ratio for display only |
-| `art` | `false` | Apple II HGR artifact-color mode |
+| `art` | `false` | Apple II HGR artifact color; bit 7 is drawn as an extra column per word |
 | `palname` | — | Preferred palette name for preview |
 | `comp` | — | `"rletag"` = RLE-compressed block |
 | `map` | — | `"nesnt"` = NES nametable, `"charpad"` = C64 CharPad map, `"tilemap"` = generic tile map; not a bitmap |
@@ -182,8 +182,10 @@ const unsigned char PALETTE[32] = { ... };
 `bpw` applies to palette blocks too — PC Engine palettes are 16-bit
 words, so their blocks carry `bpw:16` for correct parsing and write-back.
 
-In Apple II artifact-color mode (`art:1`), the artifact column (high bit) is edited
-separately and is left alone by the transforms.
+In Apple II artifact-color mode (`art:1`), the artifact column (high bit) is
+shown as a half-transparent 2-color column at the end of each word's pixels,
+and is left alone by the transforms. `w` must include that column (e.g. `w:8` for one byte per
+row, of which seven pixels are visible and the eighth is the artifact bit).
 
 ### Palette names
 
@@ -434,9 +436,18 @@ order. The mode implies 4 colors regardless of `bpp`.
 
 ### `art:1`
 
-Apple II HGR artifact color: bit 7 of each byte selects the color set, and
-the editor shows a per-group palette toggle. The artifact bit is bit 0
-when `brev` is set, bit 7 otherwise.
+Apple II HGR artifact color: bit 7 of each byte selects the color set. Each
+group of eight columns is drawn as its seven pixels, then the artifact bit
+itself as a half-transparent two-color pixel (palette entry 0 or 1), so its
+state is visible. Click or drag that column to toggle it.
+
+Because the artifact bit is part of the image data, `w` must include it:
+`w:8` for a byte-per-row image, `w:16` for two bytes per row (each gets its
+own artifact column). `w:7,art:1` has no room for bit 7 and is
+rejected by the Asset Editor.
+
+With `brev` (MSB first) the artifact bit is the first column of each group
+instead of the last. Flips, rotations and pastes skip the artifact columns.
 
 ## Validation
 

@@ -51,7 +51,7 @@ export const URUST_RS8_CHILDREN: { [module: string]: string[] } = {
   cbm: ["console", "regs"],
   coleco: ["util"],
   gb: ["tone", "util"],
-  gfx: ["span"],
+  gfx: ["surface"],
   host: ["console", "tone"],
   msx: ["util"],
   nes: ["console", "tone", "util"],

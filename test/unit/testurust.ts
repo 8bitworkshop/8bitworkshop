@@ -64,11 +64,11 @@ describe('urust tool', function () {
 
   it('links the modules named in a use brace group', function () {
     const src = 'use rs8::apple2;\nuse rs8::apple2::util;\n' +
-      'use rs8::gfx::span::*;\nuse rs8::{io, reset};\n';
+      'use rs8::gfx::surface::*;\nuse rs8::{io, reset};\n';
     // one regex match cannot list a group's items; scanRs8UseGroups walks
     // the braces with the generated module/child table
     assert.deepStrictEqual(matchDependencyPatterns(src, getIncludePatterns('urust')),
-      ['apple2.rs', 'apple2/util.rs', 'gfx/span.rs', 'io.rs']);
+      ['apple2.rs', 'apple2/util.rs', 'gfx/surface.rs', 'io.rs']);
   });
 
   it('links nested modules inside a brace group', function () {

@@ -61,7 +61,7 @@ export type PixelEditorImageFormat = {
   il?: boolean	// interleave images row by row
   aspect?: number	// aspect ratio
   xform?: string		// CSS transform
-  art?: number		// artifact color, Apple II
+  art?: number | boolean	// artifact color, Apple II
   palname?: string	// preferred palette name (matches a palette header's `name`)
   defpal?: string		// predefined palette to use when the project has none
   destfmt?: PixelEditorImageFormat
@@ -71,8 +71,27 @@ export type PixelEditorImageFormat = {
   pacstrip?:boolean|number
 };
 
-function getArtBit(fmt: PixelEditorImageFormat): number | null {
-  return fmt.art ? (fmt.brev ? 0 : 7) : null;
+// Logical (left-to-right) column of the artifact bit within each word.
+// The artifact bit is bit 7 of the word; with `brev` (MSB leftmost) it is the
+// first column of each group, with LSB-first data (Apple II HGR) the last.
+export function getArtBit(fmt: PixelEditorImageFormat): number | null {
+  if (!fmt.art) return null;
+  var bitsperword = fmt.bpw || 8;
+  return fmt.brev ? Math.max(0, bitsperword - 8) : Math.min(7, bitsperword - 1);
+}
+
+// Artifact columns are at `gapX`, `gapX + gapBits`, ... and only while they fit
+// inside the image (w:7,art:1 has no room for bit 7 in a byte-per-row image).
+export function countArtColumns(width: number, gapX: number | null, gapBits: number): number {
+  if (gapX == null || gapX < 0 || gapX >= width) return 0;
+  gapBits = gapBits || 8;
+  return Math.floor((width - gapX - 1) / gapBits) + 1;
+}
+
+export function isArtColumn(x: number, width: number, gapX: number | null, gapBits: number): boolean {
+  if (gapX == null || gapX < 0 || gapX >= width) return false;
+  gapBits = gapBits || 8;
+  return x >= gapX && ((x - gapX) % gapBits) == 0;
 }
 
 export type PixelEditorPaletteFormat = {
@@ -349,7 +368,16 @@ function isTileGridMap(fmt): boolean {
   return fmt.map == 'charpad' || fmt.map == 'tilemap';
 }
 
+function validateArtFormat(fmt): string | null {
+  var artBit = getArtBit(fmt);
+  if (artBit != null && fmt.w > 0 && artBit >= fmt.w)
+    return `art:1 requires w to include the artifact column (w:${artBit + 1} for this format)`;
+  return null;
+}
+
 export function validateAssetData(datastr: string, fmt): string | null {
+  var err = validateArtFormat(fmt);
+  if (err) return err;
   var words = parseHexWords(convertToHexStatements(datastr));
   if (fmt.comp == 'rletag') {
     words = Array.from(rle_unpack(new Uint8Array(words)));
@@ -374,6 +402,8 @@ export function validateAssetData(datastr: string, fmt): string | null {
 // same as validateAssetData, but for a raw binary file (e.g. referenced via #embed)
 // where the byte count is already known and there's no source text to parse
 export function validateAssetByteLength(bytelen: number, fmt): string | null {
+  var err = validateArtFormat(fmt);
+  if (err) return err;
   if (fmt.comp == 'rletag') {
     return null; // can't statically determine compressed length
   }
@@ -1465,6 +1495,7 @@ export class ImageChooser {
   width: number;
   height: number;
   gapX: number | null = null;
+  gapBits: number = 8;
   viewers: Viewer[];
 
   recreate(parentdiv: JQuery, onclick) {
@@ -1479,6 +1510,7 @@ export class ImageChooser {
       viewer.width = this.width;
       viewer.height = this.height;
       viewer.gapX = this.gapX;
+      viewer.gapBits = this.gapBits;
       viewer.recreate();
       viewer.canvas.style.width = (viewer.displayWidth * cscale) + 'px'; // TODO
       viewer.canvas.title = '$' + hex(i);
@@ -1723,7 +1755,8 @@ export class CharmapEditor extends PixNode {
     chooser.height = this.fmt.h || 1;
     var artBit = getArtBit(this.fmt);
     if (artBit != null) {
-      chooser.gapX = this.fmt.brev ? artBit + 1 : artBit;
+      chooser.gapX = artBit;
+      chooser.gapBits = this.fmt.bpw || 8;
     }
     chooser.recreate(agrid, (index, viewer) => {
       // TODO: variable scale?
@@ -1765,17 +1798,10 @@ export class CharmapEditor extends PixNode {
 
   updateArtInfo() {
     if (!this.fmt.art || !this.chooser || !this.chooser.viewers) return;
-    var bitsperword = this.fmt.bpw || 8;
-    var artBit = getArtBit(this.fmt)!;
     var indexedImages = this.left.images;
     if (!indexedImages) return;
     for (var i = 0; i < this.chooser.viewers.length; i++) {
-      var viewer = this.chooser.viewers[i];
-      viewer.artInfo = {
-        artBit: artBit,
-        bitsperword: bitsperword,
-        indexedImage: indexedImages[i]
-      };
+      this.chooser.viewers[i].artInfo = { indexedImage: indexedImages[i] };
     }
   }
 
@@ -1831,7 +1857,8 @@ export class Viewer {
 
   width: number;
   height: number;
-  gapX: number | null = null;
+  gapX: number | null = null;   // leftmost artifact column in each word
+  gapBits: number = 8;          // bits per word; artifact columns repeat every gapBits
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   imagedata: ImageData;
@@ -1839,10 +1866,18 @@ export class Viewer {
   displayImageData: ImageData;
   displayRgbData: Uint32Array;
   peerviewers: Viewer[];
-  artInfo: { artBit: number, bitsperword: number, indexedImage: Uint8Array } | null = null;
+  artInfo: { indexedImage: Uint8Array } | null = null;
+
+  get artColumnCount(): number {
+    return this.gapX == null ? 0 : countArtColumns(this.width, this.gapX, this.gapBits);
+  }
 
   get displayWidth(): number {
-    return this.width + (this.gapX != null ? 1 : 0);
+    return this.width;
+  }
+
+  isArtColumn(x: number): boolean {
+    return this.gapX != null && isArtColumn(x, this.width, this.gapX, this.gapBits);
   }
 
   recreate() {
@@ -1860,6 +1895,7 @@ export class Viewer {
     this.width = pv.width;
     this.height = pv.height;
     this.gapX = pv.gapX;
+    this.gapBits = pv.gapBits;
     this.imagedata = pv.imagedata;
     this.rgbdata = pv.rgbdata;
     this.canvas = this.newCanvas();
@@ -1889,18 +1925,13 @@ export class Viewer {
     }
     for (let v of this.peerviewers) {
       if (v.gapX != null && v.displayRgbData) {
-        var gx = v.gapX;
-        var dw = v.displayWidth;
-        for (var y = 0; y < this.height; y++) {
-          var srcOfs = y * this.width;
-          var dstOfs = y * dw;
-          for (var x = 0; x < gx; x++) {
-            v.displayRgbData[dstOfs + x] = this.rgbdata[srcOfs + x];
-          }
-          v.displayRgbData[dstOfs + gx] = 0x00000000; // Transparent gap column.
-          for (var x = gx; x < this.width; x++) {
-            v.displayRgbData[dstOfs + x + 1] = this.rgbdata[srcOfs + x];
-          }
+        // Same layout as rgbdata. The artifact bit is drawn as a 2-color pixel
+        // (so its 0/1 state is visible) but half-transparent, so a solid grey
+        // palette entry doesn't hide what's behind it. Only this display copy
+        // is faded; rgbdata keeps the real palette color (toggle reads it back).
+        for (var i = 0; i < this.rgbdata.length; i++) {
+          var px = this.rgbdata[i];
+          v.displayRgbData[i] = v.isArtColumn(i % this.width) ? ((px & 0x00ffffff) | 0x80000000) >>> 0 : px;
         }
         v.ctx.putImageData(v.displayImageData, 0, 0);
       } else {
@@ -1966,7 +1997,6 @@ class PixEditor extends Viewer {
     var dw = this.displayWidth;
     var x = Math.floor(e.offsetX * dw / $(this.canvas).width());
     var y = Math.floor(e.offsetY * this.height / $(this.canvas).height());
-    if (this.gapX != null && x > this.gapX) x--;
     return { x: x, y: y };
   }
 
@@ -2047,27 +2077,25 @@ class PixEditor extends Viewer {
   }
 
   isArtPixel(x: number): boolean {
-    if (!this.artInfo) return false;
-    return (x % this.artInfo.bitsperword) == this.artInfo.artBit;
+    return this.isArtColumn(Math.round(x));
   }
 
   toggleArtPixel(x: number, y: number): number {
-    var info = this.artInfo;
-    if (!info) return -1;
+    if (x < 0 || x >= this.width || y < 0 || y >= this.height) return -1;
     var ofs = y * this.width + x;
-    var newIdx = info.indexedImage[ofs] ? 0 : 1;
+    // read the state from what is on screen: the indexed image can be stale
+    var newIdx = this.rgbdata[ofs] == this.palette[0] ? 1 : 0;
     this.setArtPixel(x, y, newIdx);
     return newIdx;
   }
 
   setArtPixel(x: number, y: number, idx: number): void {
-    var info = this.artInfo;
-    if (!info) return;
     if (x < 0 || x >= this.width || y < 0 || y >= this.height) return;
     var ofs = y * this.width + x;
-    if (info.indexedImage[ofs] == idx) return;
-    info.indexedImage[ofs] = idx;
     this.rgbdata[ofs] = this.palette[idx];
+    // keep the indexed image (which writes the words back) in step
+    var indexed = this.artInfo && this.artInfo.indexedImage;
+    if (indexed && ofs < indexed.length) indexed[ofs] = idx;
     this.updateImage();
   }
 
@@ -2130,11 +2158,10 @@ class PixEditor extends Viewer {
 
   // returns the image with art-bit columns removed, like remapPixels() operates on
   getStrippedPixels(): { pixels: Uint32Array, width: number } {
-    if (!this.artInfo) {
+    if (this.gapX == null) {
       return { pixels: this.rgbdata.slice(), width: this.width };
     }
-    var bpw = this.artInfo.bitsperword;
-    var strippedWidth = this.width - Math.floor(this.width / bpw);
+    var strippedWidth = this.width - this.artColumnCount;
     var stripped = new Uint32Array(strippedWidth * this.height);
     this.copyNonArtPixels(stripped, strippedWidth, this.rgbdata, this.width);
     return { pixels: stripped, width: strippedWidth };
@@ -2185,9 +2212,8 @@ class PixEditor extends Viewer {
     // Strip art bit columns so transforms ignore them.
     var savedRgb = this.rgbdata;
     var savedWidth = this.width;
-    if (this.artInfo) {
-      var bpw = this.artInfo.bitsperword;
-      var strippedWidth = this.width - Math.floor(this.width / bpw);
+    if (this.gapX != null) {
+      var strippedWidth = this.width - this.artColumnCount;
       var stripped = new Uint32Array(strippedWidth * this.height);
       this.copyNonArtPixels(stripped, strippedWidth, this.rgbdata, this.width);
       this.rgbdata = stripped;
@@ -2204,7 +2230,7 @@ class PixEditor extends Viewer {
     // Restore art bit columns from the original data.
     this.rgbdata = savedRgb;
     this.width = savedWidth;
-    if (this.artInfo) {
+    if (this.gapX != null) {
       this.copyNonArtPixels(this.rgbdata, this.width, pixels, strippedWidth);
     } else {
       this.rgbdata.set(pixels);

@@ -25,6 +25,8 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 
 ### Debugging
 
+- The Call Graph's line no longer asks you to decode `921288/727632`. It reads `5868x 12.2% (9.6% self) 921K @254-256`: the inclusive share of clocks, then the routine's own share, then the inclusive clocks abbreviated to three significant digits (`K`, `M`, `G`). The own share is left out when the routine calls nothing. A routine shows its symbol alone instead of `$1234 (foo)`, and hovering the line gives the exact clocks, call count and address.
+
 - The Disassembly window interleaves the high-level source line (C, BASIC, Rust, ...) for each instruction it starts, as a `; file:line: text` comment in a distinct color. Assembly sources such as ca65, DASM and ACME are left alone, since their instructions are already the disassembly. Linked sources show their own file name; code with no source in the project (such as a library routine) is disassembled as before.
 
 - SDCC's mos6502 backend now reports its segment map and symbol sizes. It names each area `s_CODE`/`l_CODE`, while z80 builds use `s__CODE`/`l__CODE`; the parser only knew the latter, so C64 and other 6502 builds had no segments, no Module column and no symbol sizes.
@@ -49,6 +51,8 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 - **VIC-20**: the text window is drawn correctly now. The VIC-I emulated the VIC-II's display window registers, so the 22 column window was placed at a garbage offset: the first character column was clipped in half and the screen was shifted 24 pixels to the right. The VIC-I window is fixed at 22x23 characters and centered in the picture; its vertical position still comes from the ROM (the "upper border" register), so NTSC and PAL ROMs both work.
 
 ### Editor and UI
+
+- Apple II artifact-color bitmaps (`art:1`) show the artifact bit once per word: seven visible pixels, then the bit drawn as a half-transparent black or white pixel so its state is visible, and clicking or dragging it toggles it. Images wider than one byte get an artifact column for every word (before, only the first was marked and the rest looked like ordinary pixels). `w` must include the artifact column (`w:8` per byte), which the Asset Editor now reports instead of silently drawing nothing; with `brev` the artifact column is the first in each group rather than the last.
 
 - Header windows (the read-only view of toolchain and shared include files, and urust modules) show the code-offset gutter for lines the build compiled, the same as source files, and follow the *Show line numbers* setting. Headers that emit no code show an empty gutter.
 
