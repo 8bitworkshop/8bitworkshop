@@ -2,7 +2,7 @@ import { CallGraphBuilder, CallGraphNode, InsnKind } from "../../common/callgrap
 import { isCallInsn, isReturnInsn } from "../../common/debugcontroller";
 import { dumpRAM } from "../../common/emu";
 import { ProbeFlags } from "../../common/probe";
-import { hex } from "../../common/util";
+import { formatClocks, hex } from "../../common/util";
 import { platform } from "../ui";
 import { ProjectView } from "./baseviews";
 import { ProbeViewBaseBase } from "./debugviews";
@@ -71,6 +71,7 @@ class TreeNode {
   update(obj : any) {
     this.getDiv();
     var text = "";
+    var title = obj && typeof obj.$$title == 'string' ? obj.$$title : "";
     // is it a function? call it first, if we are expanded
     // TODO: only call functions w/ signature
     if (obj && obj.$$ && typeof obj.$$ == 'function' && this._content != null) {
@@ -168,6 +169,9 @@ class TreeNode {
     if (this._inline.innerText != text) {
       this._inline.innerText = text;
     }
+    if (this._header.title != title) {
+      this._header.title = title;
+    }
   }
 }
 
@@ -211,7 +215,7 @@ export class DebugBrowserView extends TreeViewBase implements ProjectView {
 
 export class CallGraphView extends ProbeViewBaseBase implements ProjectView {
   treeroot : TreeNode;
-  builder = new CallGraphBuilder(pc => this.classify(pc), pc => this.addr2str(pc));
+  builder = new CallGraphBuilder(pc => this.classify(pc), pc => this.addr2symbol(pc) || '$' + hex(pc));
   kinds = new Map<number, InsnKind>();
   cumulativeData = true;
 
@@ -276,10 +280,14 @@ export class CallGraphView extends ProbeViewBaseBase implements ProjectView {
   callees(node : CallGraphNode, base : number) : Object {
     const out = {};
     for (const [name, c] of Object.entries(node.calls)) {
-      // count, share of total, clocks (total/self), scanlines
-      let text = c.count + "x " + (100 * c.total / base).toFixed(1) + "% " + c.total + (c.self != c.total ? "/" + c.self : "");
+      // count, share of all clocks, own share when it calls something, clocks
+      let text = c.count + "x " + (100 * c.total / base).toFixed(1) + "%";
+      if (c.self != c.total) text += " (" + (100 * c.self / base).toFixed(1) + "% self)";
+      text += " " + formatClocks(c.total);
       if (c.startLine != null) text += " @" + c.startLine + (c.endLine != null && c.endLine != c.startLine ? "-" + c.endLine : "");
-      out[name] = Object.assign({ $$text: text }, this.callees(c, base));
+      let title = c.count + " calls, " + c.total + " clocks (" + c.self + " self)";
+      if (c.$$PC != null) title += " at $" + hex(c.$$PC);
+      out[name] = Object.assign({ $$text: text, $$title: title }, this.callees(c, base));
     }
     return out;
   }

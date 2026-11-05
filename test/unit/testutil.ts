@@ -2,7 +2,7 @@
 import assert from "assert";
 import { describe } from "mocha";
 import { EmuHalt } from "../../src/common/emu"
-import { lzgmini, isProbablyBinary, hex, encodeBase64Url, decodeBase64Url } from "../../src/common/util";
+import { lzgmini, isProbablyBinary, hex, formatClocks, encodeBase64Url, decodeBase64Url } from "../../src/common/util";
 import { Tokenizer, TokenType } from "../../src/common/tokenizer";
 import { OPS_6502 } from "../../src/common/cpu/disasm6502";
 import { MOS6502 } from "../../src/common/cpu/MOS6502";
@@ -161,6 +161,21 @@ describe('string functions', function () {
     const data = new Uint8Array([0x01, 0x02, 0x03, 0x80, 0xfe, 0xff]);
     const std = Buffer.from(data).toString('base64');
     assert.deepStrictEqual(Array.from(decodeBase64Url(std)), Array.from(data));
+  });
+});
+
+describe('formatClocks', function () {
+  it('Should abbreviate clock counts', function () {
+    assert.strictEqual(formatClocks(0), '0');
+    assert.strictEqual(formatClocks(999), '999');
+    assert.strictEqual(formatClocks(1000), '1K');
+    assert.strictEqual(formatClocks(1234), '1.23K');
+    assert.strictEqual(formatClocks(12345), '12.3K');
+    assert.strictEqual(formatClocks(123456), '123K');
+    assert.strictEqual(formatClocks(921288), '921K');
+    assert.strictEqual(formatClocks(999999), '1M'); // rounds up instead of 1000K
+    assert.strictEqual(formatClocks(80123456), '80.1M');
+    assert.strictEqual(formatClocks(1234567890), '1.23G');
   });
 });
 

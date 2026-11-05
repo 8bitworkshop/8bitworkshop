@@ -44,6 +44,19 @@ export function tobin(v:number, nd?:number) {
   return toradix(v,nd,2);
 }
 
+/** A clock count, abbreviated to three significant digits: 921, 12.3K, 80.1M. */
+export function formatClocks(n:number) : string {
+  if (n < 1000) return String(Math.round(n));
+  const suffixes = ['K','M','G','T'];
+  let v = n, i = -1;
+  while (v >= 1000 && i < suffixes.length - 1) { v /= 1000; i++; }
+  let s = v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : v.toFixed(0);
+  // rounding can carry into the next unit: 999.6K -> 1000K
+  if (s == '1000') return i < suffixes.length - 1 ? '1' + suffixes[i+1] : s + suffixes[i];
+  if (s.indexOf('.') >= 0) s = s.replace(/\.?0+$/, '');
+  return s + suffixes[i];
+}
+
 export function toradix(v:number, nd:number, radix:number) {
   try {
     var s = v.toString(radix).toUpperCase();
