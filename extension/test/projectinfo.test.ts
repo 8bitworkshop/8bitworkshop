@@ -243,11 +243,13 @@ describe('languageFor', function () {
   });
 
   it('offers the Rust fallback only on urust platforms', function () {
-    for (var platform of ['nes', 'vcs', 'c64', 'atari8-800', 'apple2', 'vic20', 'zx', 'devel-6502'])
+    for (var platform of ['nes', 'vcs', 'c64', 'atari8-800', 'apple2', 'vic20', 'zx', 'devel-6502',
+      'coleco', 'msx', 'gb', 'atari7800'])
       assert.equal(rustLanguageFor('main.rs', platform), '8bws-rust', platform);
     assert.equal(languageFor('game.rs', 'nes'), '8bws-rust');
     assert.equal(languageFor('GAME.RS', 'c64'), '8bws-rust');
-    assert.equal(rustLanguageFor('main.rs', 'gb'), undefined);
+    // .rs selects urust on every Z80 platform, but cpc is not a urust target
+    assert.equal(rustLanguageFor('main.rs', 'cpc'), undefined);
     assert.equal(rustLanguageFor('main.rs', 'verilog'), undefined);
     assert.equal(rustLanguageFor('main.c', 'nes'), undefined);
   });

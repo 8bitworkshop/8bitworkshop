@@ -130,6 +130,14 @@ describe('urust tool', function () {
     assert.strictEqual(urustPlatformName('vic20'), 'vic20');
     // the Z80 backend names the whole computer, not the CPU
     assert.strictEqual(urustPlatformName('zx'), 'zx-spectrum');
+    assert.strictEqual(urustPlatformName('coleco'), 'colecovision');
+    // urust targets the MSX and Game Boy too
+    assert.strictEqual(urustPlatformName('msx'), 'msx');
+    assert.strictEqual(urustPlatformName('gb'), 'gb');
+    assert.strictEqual(urustPlatformName('atari7800'), 'atari7800');
+    // .rs selects urust on every Z80 platform, but not every one is a target
+    assert.strictEqual(urustPlatformName('cpc'), undefined);
+    assert.strictEqual(urustPlatformName('verilog'), undefined);
   });
 
   it('parses JSON diagnostics; end column only on a single line', function () {

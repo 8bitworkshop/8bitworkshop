@@ -5,11 +5,13 @@ import {
 
 describe('rust-analyzer settings', function () {
   it('recognizes a urust project by platform or tool', function () {
-    for (var platform of ['nes', 'vcs', 'c64', 'atari8-800', 'apple2', 'vic20', 'zx', 'devel-6502'])
+    for (var platform of ['nes', 'vcs', 'c64', 'atari8-800', 'apple2', 'vic20', 'zx', 'devel-6502',
+      'coleco', 'msx', 'gb', 'atari7800'])
       assert.ok(isUrustProject(platform), platform);
     assert.ok(isUrustProject('nes', 'urust'));
     assert.ok(!isUrustProject('nes', 'cc65'));
-    assert.ok(!isUrustProject('gb'), 'gb has no urust target');
+    assert.ok(!isUrustProject('cpc'), 'cpc has no urust target');
+    assert.ok(!isUrustProject('verilog'), 'verilog has no urust target');
     assert.ok(!isUrustProject(undefined));
   });
 

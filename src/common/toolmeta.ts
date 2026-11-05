@@ -1068,10 +1068,10 @@ export function getSkeletonName(tool: string): string {
 }
 
 /**
- * urust's `--platform` names, keyed by the 8bitworkshop platform root (the id
- * without a `.emulator` suffix or a `-specialization`). A root that isn't here
- * has no urust target, even though .rs selects urust on every 6502/Z80
- * platform (see toolselect.ts).
+ * urust's `--platform` names that differ from the 8bitworkshop platform root
+ * (the id without a `.emulator` suffix or a `-specialization`). A root not in
+ * this map or in URUST_PASSTHROUGH_ROOTS has no urust target, even though .rs
+ * selects urust on every 6502/Z80 platform (see toolselect.ts).
  */
 export const URUST_PLATFORM_NAMES: { [root: string]: string } = {
   'devel': 'devel-6502',
@@ -1079,9 +1079,16 @@ export const URUST_PLATFORM_NAMES: { [root: string]: string } = {
   'coleco': 'colecovision'
 };
 
+/** Platform roots urust targets under their own name. */
+const URUST_PASSTHROUGH_ROOTS = new Set([
+  'nes', 'c64', 'atari8', 'vcs', 'apple2', 'vic20', 'atari7800', 'msx', 'gb',
+]);
+
 /** urust's `--platform` name for an 8bitworkshop platform id, if it has one. */
 export function urustPlatformName(platform: string): string | undefined {
-  return URUST_PLATFORM_NAMES[platform.split(/[.-]/)[0]] || getRootBasePlatform(platform);
+  var root = getRootBasePlatform(platform);
+  if (URUST_PLATFORM_NAMES[root]) return URUST_PLATFORM_NAMES[root];
+  return URUST_PASSTHROUGH_ROOTS.has(root) ? root : undefined;
 }
 
 /**
