@@ -41,6 +41,10 @@ export interface SourceVariable {
   col?: number | null;
   /** `optimized out` when the compiler kept no storage for it */
   location?: string;
+  /** the value, when the compiler folded the variable to a constant: it has
+   *  no `addr`, but `range` is the code that uses it (little-endian over
+   *  `size` bytes) */
+  constant?: number | null;
 }
 
 /** A source-declared global: always live, so it has no function or range. */
@@ -74,6 +78,8 @@ export interface VariableStorage {
   addr?: number | null;
   /** a zero-page pointer that `addr` is relative to */
   baseAddr?: number | null;
+  /** the value of a variable folded to a constant, which has no `addr` */
+  constant?: number | null;
 }
 
 /** The source variables a build put in `DebugSymbols.debuginfo`, if any. */
@@ -178,11 +184,20 @@ function formatBytes(bytes: Uint8Array): string {
  */
 export function formatSourceValue(v: VariableStorage, read: (addr: number) => number): string | Uint8Array {
   const addr = sourceVariableAddress(v, read);
-  if (addr == null) return '<optimized out>';
+  if (addr == null && v.constant == null) return '<optimized out>';
   // big arrays are shown by their first rows; the tree can chunk the rest
   const size = Math.max(1, Math.min(v.size || 1, 1024));
   const bytes = new Uint8Array(size);
-  for (let i = 0; i < size; i++) bytes[i] = read(addr + i) & 0xff;
+  if (addr != null) {
+    for (let i = 0; i < size; i++) bytes[i] = read(addr + i) & 0xff;
+  } else {
+    // folded to a constant: the compiler knows the value, memory does not
+    let c = v.constant as number;
+    for (let i = 0; i < size && i < 8; i++) {
+      bytes[i] = c % 256;
+      c = Math.floor(c / 256);
+    }
+  }
   const type = (v.type || '').trim();
   if (type === 'bool') return bytes[0] ? 'true' : 'false';
   if (isIntegerType(type)) {

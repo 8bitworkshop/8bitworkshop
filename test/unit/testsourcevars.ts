@@ -78,6 +78,9 @@ describe('Source variables', function () {
     assert.strictEqual(formatSourceValue(byName('running'), read), 'true');
     assert.strictEqual(formatSourceValue(byName('items'), read), '01 02 03');
     assert.strictEqual(formatSourceValue(byName('i'), read), '<optimized out>');
+    // folded to a constant: no storage, but the value is known
+    assert.strictEqual(formatSourceValue({ type: 'u16', size: 2, addr: null, constant: 0x1234 }, read), '$1234 (4660)');
+    assert.strictEqual(formatSourceValue({ type: 'bool', size: 1, addr: null, constant: 1 }, read), 'true');
     assert.strictEqual(formatSourceVariableLine(byName('score'), read), 'score: u16 = $1234 (4660)');
   });
 
