@@ -263,7 +263,7 @@ export function globalVariableTree(vars: GlobalVariable[],
 }
 
 /** A source line and the address where its code starts (one entry per listed line). */
-export interface LineOffset { line: number; offset: number }
+export interface LineOffset { line: number; offset: number; path?: string }
 
 /**
  * The code range of each source line: from its first listed address to the
@@ -294,6 +294,20 @@ function mentions(text: string, name: string): boolean {
   return re.test(text);
 }
 
+/** Is the build-relative path `a` the same file as `b`, allowing a leading directory difference? */
+function samePath(a: string, b: string): boolean {
+  return a === b || a.endsWith('/' + b) || b.endsWith('/' + a);
+}
+
+/**
+ * The name a variable goes by in the source. The compiler names the variables
+ * of an inlined function `mangled_callee::name`, but the line only says `name`.
+ */
+function sourceName(v: SourceVariable): string {
+  const i = v.name.lastIndexOf('::');
+  return i >= 0 ? v.name.slice(i + 2) : v.name;
+}
+
 /**
  * The variables to show at the end of source lines while stopped at `pc`, as
  * `name = value` text keyed by 1-based line number.
@@ -307,12 +321,19 @@ function mentions(text: string, name: string): boolean {
  * Each variable is then shown once, on its candidate line nearest `stopLine`
  * (ties go to the earlier line), so a loop index is not repeated on every
  * line that uses it. Without a `stopLine` the first candidate wins.
+ *
+ * When `lines` all come from one named source path (a module of a multi-file
+ * build), only that file's variables are drawn, so a declaration line in
+ * another module is not taken for a line here.
  */
 export function inlineSourceValues(vars: SourceVariable[], pc: number,
   symbolmap: { [name: string]: number }, symbolsizes: { [name: string]: number } | undefined,
   lines: LineOffset[], lineText: (line: number) => string | null,
   read: (addr: number) => number, stopLine?: number | null): Map<number, string> {
-  const live = liveSourceVariables(vars, pc, symbolmap, symbolsizes);
+  const paths = new Set(lines.map(l => l.path || ''));
+  const filePath = paths.size === 1 ? [...paths][0] : '';
+  const live = liveSourceVariables(vars, pc, symbolmap, symbolsizes)
+    .filter(v => !filePath || !v.file || samePath(v.file, filePath));
   const result = new Map<number, string>();
   if (!live.length) return result;
   const codeRanges = lineCodeRanges(lines);
@@ -328,14 +349,16 @@ export function inlineSourceValues(vars: SourceVariable[], pc: number,
     let best = -1;
     for (const line of candidates) {
       const text = lineText(line);
-      if (!text || !mentions(text, v.name)) continue;
+      if (!text || !mentions(text, sourceName(v))) continue;
       const ranges = codeRanges.get(line);
       if (ranges && vr.length && !ranges.some(r => vr.some(x => overlaps(r, x)))) continue;
       if (best < 0 || distance(line) < distance(best)) best = line;
     }
     if (best < 0) continue;
     const list = parts.get(best) || [];
-    list.push(`${v.name} = ${val.replace(/^\$[0-9a-f]+ \((-?\d+)\)$/i, '$1')}`);
+    // inlined copies of one function share short names; say each `name = value` once
+    const text = `${sourceName(v)} = ${val.replace(/^\$[0-9a-f]+ \((-?\d+)\)$/i, '$1')}`;
+    if (!list.includes(text)) list.push(text);
     parts.set(best, list);
   }
   for (const [line, list] of parts) result.set(line, list.join(', '));

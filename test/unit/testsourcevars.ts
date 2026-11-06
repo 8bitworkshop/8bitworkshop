@@ -143,4 +143,23 @@ describe('Inline source values', function () {
     const m = inlineSourceValues(vars, 0x8010, symbolmap, symbolsizes, lines, l => t[l - 1], read, 5);
     assert.strictEqual(m.has(5), false);
   });
+  it('shows an inlined callee\'s variable under its source name', function () {
+    // the compiler names it `mangled_callee::name`; the line only says `name`
+    const inl: SourceVariable[] = [{ name: 'mod__callee::i', type: 'u8', size: 1, function: 'main', addr: 0x10, range: [0x8000, 0x8020], line: 2 }];
+    const m = inlineSourceValues(inl, 0x8010, symbolmap, symbolsizes, lines, l => text[l - 1], read, 4);
+    assert.strictEqual(m.get(4), 'i = 5');
+    // two inlined copies with the same name and value are listed once
+    const twice = [...inl, { ...inl[0], name: 'mod__other::i' }];
+    assert.strictEqual(inlineSourceValues(twice, 0x8010, symbolmap, symbolsizes, lines, l => text[l - 1], read, 4).get(4), 'i = 5');
+  });
+  it('draws only the variables of the file whose lines it is given', function () {
+    // `i` is declared at line 2 of other.rs, which this file's line 2 must not pick up
+    const mine = lines.map(l => ({ ...l, path: 'rs8/mine.rs' }));
+    const two: SourceVariable[] = [
+      { ...vars[0], file: 'other.rs' },
+      { ...vars[1], file: 'mine.rs' },
+    ];
+    const m = inlineSourceValues(two, 0x8010, symbolmap, symbolsizes, mine, l => text[l - 1], read, 4);
+    assert.deepStrictEqual([...m.values()], ['sum = 7']);
+  });
 });

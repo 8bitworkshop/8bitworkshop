@@ -115,6 +115,21 @@ function sourceLineOffsetMap(sourcefile: SourceFile): Map<number, string> {
   return offsets;
 }
 
+/**
+ * Draw the stopped function's variable values at the ends of the lines that
+ * name them, in the source view `view` showing `sourcefile`. Only a halted
+ * program has values worth showing. `stopLine` steers which line wins a
+ * variable (see inlineSourceValues).
+ */
+function drawInlineValues(view: EditorView, sourcefile: SourceFile, stopLine?: number | null) {
+  const p = platform as any;
+  if (!sourcefile || typeof p.getInlineSourceValues !== "function" || platform.isRunning()) return;
+  const doc = view.state.doc;
+  const values = p.getInlineSourceValues(sourcefile.lines,
+    (n: number) => (n >= 1 && n <= doc.lines ? doc.line(n).text : null), stopLine);
+  showInlineValues(view, values);
+}
+
 export class SourceEditor implements ProjectView {
   // Whether to highlight recently-executed lines from live trace data.
   // Off by default (probing has a runtime cost); toggled via toolbar button.
@@ -647,16 +662,9 @@ export class SourceEditor implements ProjectView {
     }
   }
 
-  /** Draw the stopped function's variable values at the ends of the lines
-   *  that name them. Only a halted program has values worth showing. */
+  /** Draw the stopped function's variable values (see drawInlineValues). */
   refreshInlineValues() {
-    const p = platform as any;
-    if (!this.sourcefile || typeof p.getInlineSourceValues !== "function" || platform.isRunning()) return;
-    const doc = this.editor.state.doc;
-    const values = p.getInlineSourceValues(this.sourcefile.lines,
-      (n: number) => (n >= 1 && n <= doc.lines ? doc.line(n).text : null),
-      this.currentDebugLine && this.currentDebugLine.line);
-    showInlineValues(this.editor, values);
+    drawInlineValues(this.editor, this.sourcefile, this.currentDebugLine && this.currentDebugLine.line);
   }
 
   clearCurrentLine(moveCursor: boolean) {
@@ -1301,6 +1309,10 @@ export class HeaderView implements ProjectView {
       line = this.sourcefile.findLineForOffset(cpustate.EPC || cpustate.PC, PC_LINE_LOOKAHEAD);
     }
     if (line && (line.line < 1 || line.line > this.view.state.doc.lines)) line = null;
+    // values change with every step, even when the line does not, so draw
+    // them before the unchanged-line early return below
+    if (line) drawInlineValues(this.view, this.sourcefile, line.line);
+    else if (this.currentDebugLine) showInlineValues(this.view, new Map()); // left the file
     if (!moveCursor && (line === this.currentDebugLine || (!line && !this.currentDebugLine))) return;
     this.currentDebugLine = line;
     if (line) showDebugLine(this.view, line, moveCursor);

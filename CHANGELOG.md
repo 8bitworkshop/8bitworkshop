@@ -25,6 +25,8 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 
 ### Debugging
 
+- Inline variable values now appear in code that urust inlined (e.g. `rs8::gfx::surface`). The compiler names an inlined function's variables `callee::name`, which no source line contains, so they were never drawn; they show under their source name, once per line. The read-only window for a module (`rs8::gfx::surface`) now draws the values too; only the main file's editor did. A module's window also stops drawing variables declared in other files, whose line numbers could land on its lines.
+
 - The Call Graph's line no longer asks you to decode `921288/727632`. It reads `5868x 12.2% (9.6% self) 921K @254-256`: the inclusive share of clocks, then the routine's own share, then the inclusive clocks abbreviated to three significant digits (`K`, `M`, `G`). The own share is left out when the routine calls nothing. A routine shows its symbol alone instead of `$1234 (foo)`, and hovering the line gives the exact clocks, call count and address.
 
 - The Disassembly window interleaves the high-level source line (C, BASIC, Rust, ...) for each instruction it starts, as a `; file:line: text` comment in a distinct color. Assembly sources such as ca65, DASM and ACME are left alone, since their instructions are already the disassembly. Linked sources show their own file name; code with no source in the project (such as a library routine) is disassembled as before.
