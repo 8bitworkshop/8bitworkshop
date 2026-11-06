@@ -59,6 +59,7 @@ export class LocalDebugBackend implements DebugBackend {
   async signalTree(...a: Parameters<DebugService['signalTree']>) { return this.svc.signalTree(...a); }
   async symbols() { return this.svc.symbols(); }
   async disassemble(...a: Parameters<DebugService['disassemble']>) { return this.svc.disassemble(...a); }
+  async inlineValues(...a: Parameters<DebugService['inlineValues']>) { return this.svc.inlineValues(...a); }
   async evaluate(...a: Parameters<DebugService['evaluate']>) { return this.svc.evaluate(...a); }
 
   private get svc(): DebugService {

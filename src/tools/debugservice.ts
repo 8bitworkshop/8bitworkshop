@@ -11,7 +11,7 @@ import { Breakpoint, makeCondContext } from '../common/breakpoints';
 import { compileExpression } from '../common/breakcond';
 import { TreeEntry, treeChildren } from '../common/debugtree';
 import { walkStack } from '../common/stackwalk';
-import { buildDebugContext, BuildInfo, DebugController, DebugLocation, StepGranularity, StopEvent } from '../common/debugcontroller';
+import { buildDebugContext, BuildInfo, DebugContext, DebugController, DebugLocation, StepGranularity, StopEvent } from '../common/debugcontroller';
 import { resolveSymbolName } from '../common/symbols/symbolfile';
 import { formatSymbolValue, MAX_SYMBOL_BYTES, SymbolValue } from '../common/symbols/symbolvalue';
 import { Granularity, Timestamp } from '../common/timeline';
@@ -36,6 +36,9 @@ export interface DebugCapabilities {
   /** has HDL signals (getSignals) */
   signals: boolean;
 }
+
+/** A variable's value to show at the end of a source line. */
+export interface InlineValue { line: number; text: string }
 
 export interface BreakpointResult {
   id: number;
@@ -99,9 +102,12 @@ export class DebugService {
     this.script = new RunScript(target, s => { this.scriptOut += s; }, this.debug);
   }
 
+  private ctx?: DebugContext;
+
   /** A new build: its listings, symbols and debug info. */
   setBuild(build: BuildInfo) {
-    this.script.setDebugContext(buildDebugContext(build));
+    this.ctx = buildDebugContext(build);
+    this.script.setDebugContext(this.ctx);
     // the platform's debug tree reads symbols and source variables from here
     this.target.platform.debugSymbols = new DebugSymbols(build.symbolmap || {}, build.debuginfo || {}, build.symbolsizes);
   }
@@ -221,6 +227,24 @@ export class DebugService {
   writeMemory(addr: number, bytes: number[]): number {
     bytes.forEach((b, i) => this.target.write((addr + i) & 0xffff, b & 0xff));
     return bytes.length;
+  }
+
+  /**
+   * The source variables to draw at the ends of the lines of `path` while
+   * stopped (see inlineSourceValues): `name = value` text by 1-based line.
+   * Empty while running, or without variable info for the file.
+   */
+  inlineValues(path: string): InlineValue[] {
+    const p = this.target.platform as any;
+    const sf = this.ctx?.getListingForFile?.(path)?.sourcefile;
+    if (this.running || !sf || typeof p.getInlineSourceValues !== 'function') return [];
+    const text = sf.text.split('\n');
+    // the stop line only steers which line wins a variable when it is in this file
+    const src = this.debug.sourceAt(this.target.getPC());
+    const here = src && this.ctx.getListingForFile(src.path)?.sourcefile === sf ? src.line : null;
+    const values: Map<number, string> = p.getInlineSourceValues(sf.lines,
+      (n: number) => (n >= 1 && n <= text.length ? text[n - 1] : null), here);
+    return [...values].map(([line, text]) => ({ line, text }));
   }
 
   /** The debug tree's entries under `path` (names from earlier calls). */

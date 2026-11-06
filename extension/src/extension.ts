@@ -86,7 +86,7 @@ let heldDiagnostics: { timer: NodeJS.Timeout, show: () => void } | undefined;
 /** Sound is muted; remembered across runs and webviews. */
 let muted = false;
 /** The debug session driving the emulator, if one is. */
-let debugging: { session: vscode.DebugSession, backend: WorkerDebugBackend } | undefined;
+let debugging: { session: vscode.DebugSession, backend: WorkerDebugBackend, root?: string } | undefined;
 
 export function activate(ctx: vscode.ExtensionContext) {
   context = ctx;
@@ -169,6 +169,18 @@ export function activate(ctx: vscode.ExtensionContext) {
   }));
   ctx.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('8bitworkshop', {
     createDebugAdapterDescriptor: session => new vscode.DebugAdapterInlineImplementation(newDebugSession(session)),
+  }));
+  // variable values at the ends of the lines that name them, while stopped;
+  // the same placement the IDE draws (see inlineSourceValues)
+  ctx.subscriptions.push(vscode.languages.registerInlineValuesProvider({ language: '8bws-rust' }, {
+    async provideInlineValues(doc) {
+      if (!debugging?.root) return [];
+      // the debugger names files relative to the program's directory
+      var rel = path.relative(debugging.root, doc.uri.fsPath).split(path.sep).join('/');
+      var values: { line: number, text: string }[] = await debugging.backend.inlineValues(rel).catch(() => []);
+      return values.filter(v => v.line <= doc.lineCount).map(v =>
+        new vscode.InlineValueText(doc.lineAt(v.line - 1).range, v.text));
+    },
   }));
   ctx.subscriptions.push(vscode.debug.onDidTerminateDebugSession(session => {
     if (debugging?.session === session) debugging = undefined;
@@ -1615,6 +1627,7 @@ function newDebugSession(session: vscode.DebugSession): EmuDebugSession {
     async args => {
       var r = await launchForDebug(session.workspaceFolder, args);
       worker = emu;
+      if (debugging?.session === session) debugging.root = r.root;
       return r;
     },
     async () => {

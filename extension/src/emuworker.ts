@@ -116,7 +116,7 @@ export interface LoadOptions {
 const DEBUG_METHODS = new Set([
   'capabilities', 'setBuild', 'setBreakpoints', 'continue', 'step', 'pause', 'stepBack', 'reverseContinue',
   'seekFrame', 'location', 'timeline', 'registers', 'readMemory', 'writeMemory', 'disassemble', 'evaluate',
-  'debugTree', 'signalTree', 'symbols', 'callStack',
+  'debugTree', 'signalTree', 'symbols', 'callStack', 'inlineValues',
 ]);
 // the ones that replay frames the recording already has
 const REWIND_METHODS = new Set(['stepBack', 'reverseContinue', 'seekFrame']);

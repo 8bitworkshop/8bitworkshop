@@ -58,5 +58,6 @@ export class WorkerDebugBackend implements DebugBackend {
   signalTree(...a: Parameters<DebugService['signalTree']>) { return this.call('signalTree', ...a); }
   symbols() { return this.call('symbols'); }
   disassemble(...a: Parameters<DebugService['disassemble']>) { return this.call('disassemble', ...a); }
+  inlineValues(...a: Parameters<DebugService['inlineValues']>) { return this.call('inlineValues', ...a); }
   evaluate(...a: Parameters<DebugService['evaluate']>) { return this.call('evaluate', ...a); }
 }

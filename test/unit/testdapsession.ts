@@ -172,7 +172,7 @@ describe('Debug adapter, where there is no source', function () {
     location: async () => ({ at: { frame: 0, step: 0 }, pc: PC, symbol: { name: 'lib', offset: PC - 0x1000 } }),
     callStack: async () => [{ pc: PC, symbol: { name: 'lib', offset: PC - 0x1000 } }],
     registers: async () => [], readMemory: async () => [], writeMemory: async () => 0,
-    debugTree: async () => [], signalTree: async () => [], symbols: async () => [],
+    inlineValues: async () => [], debugTree: async () => [], signalTree: async () => [], symbols: async () => [],
     evaluate: async () => ({ result: '' }),
     disassemble: async (addr, insnOffset, count) => Array.from({ length: count }, (_, i) => {
       const a = addr + insnOffset + i;
@@ -223,7 +223,7 @@ describe('Debug adapter, for a design with signals', function () {
     location: async () => ({ at: { frame: 3, step: 0 }, clock: 1234, pc: PC }),
     callStack: async () => [],
     registers: async () => [], readMemory: async () => [], writeMemory: async () => 0,
-    debugTree: async () => [{ name: 'runtime', value: '', expandable: true }],
+    inlineValues: async () => [], debugTree: async () => [{ name: 'runtime', value: '', expandable: true }],
     signalTree: async (path) => signals[path.join('.')],
     symbols: async () => [], evaluate: async () => ({ result: '' }), disassemble: async () => [],
   };

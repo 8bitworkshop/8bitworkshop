@@ -46,7 +46,7 @@ type Async<T> = { [K in keyof T]: T[K] extends (...args: infer A) => infer R ? (
 /** A DebugService, wherever it runs, plus loading a program into it. */
 export type DebugBackend = Async<Pick<DebugService,
   'setBreakpoints' | 'continue' | 'step' | 'pause' | 'stepBack' | 'reverseContinue' | 'location' | 'callStack' |
-  'registers' | 'readMemory' | 'writeMemory' | 'disassemble' | 'evaluate' | 'debugTree' | 'signalTree' | 'symbols'>> & {
+  'registers' | 'readMemory' | 'writeMemory' | 'disassemble' | 'evaluate' | 'inlineValues' | 'debugTree' | 'signalTree' | 'symbols'>> & {
     /** Build or load the program, and leave it stopped at its start. */
     launch(args: LaunchArgs): Promise<LaunchResult>;
     terminate(): Promise<void>;

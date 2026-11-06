@@ -23,6 +23,8 @@
   `8bitworkshop.vectorSize` setting sets its resolution (512 by default).
 - The mouse is a paddle in the emulator panel, for programs that read one
   (Verilog designs with `hpaddle`/`vpaddle` inputs, and platforms with paddles).
+- Debugging a urust program shows variable values (`x = 3`) at the end of the
+  lines that name them while stopped, as the IDE does.
 - Reloading the window closes the emulator tab instead of restoring it blank.
 - Debugging a Verilog program shows its signals in Variables, nested by module,
   under a stack frame named for the frame and clock cycle.
