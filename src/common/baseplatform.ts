@@ -17,7 +17,7 @@ import { _MOS6502 } from "./cpu/MOS6502";
 import { AcceptsBIOS, AcceptsJoyInput, AcceptsKeyInput, AcceptsPaddleInput, AcceptsROM, Bus, FrameBased, HasCPU, HasSerialIO, Probeable, RasterFrameBased, Resettable, SampledAudioSource, SavesInputState, SavesState, SerialIOInterface, VideoSource } from "./devices";
 import { ProbeRecorder } from "./probe";
 import { BaseWASMMachine } from "./wasmplatform";
-import { formatSourceVariableLine, globalVariablesOf, globalVariableTree, liveSourceVariables, readSourceByte, sourceVariablesOf, sourceVariableTree, writableGlobalVariablesOf } from "./sourcevars";
+import { formatSourceVariableLine, globalVariablesOf, inlineSourceValues, LineOffset, globalVariableTree, liveSourceVariables, readSourceByte, sourceVariablesOf, sourceVariableTree, writableGlobalVariablesOf } from "./sourcevars";
 
 ///
 
@@ -433,6 +433,15 @@ export abstract class BaseDebugPlatform extends BasePlatform {
     if (!vars.length) return {};
     return sourceVariableTree(vars, this.debugPC(), this.debugSymbols.symbolmap,
       this.debugSymbols.symbolsizes, a => readSourceByte(this, a)) || {};
+  }
+
+  /** The live source variables to draw at the end of the lines that name
+   *  them, keyed by 1-based line number; empty without variable info. */
+  getInlineSourceValues(lines: LineOffset[], lineText: (line: number) => string | null, stopLine?: number | null): Map<number, string> {
+    const vars = sourceVariablesOf(this.debugSymbols?.debuginfo);
+    if (!vars.length) return new Map();
+    return inlineSourceValues(vars, this.debugPC(), this.debugSymbols.symbolmap,
+      this.debugSymbols.symbolsizes, lines, lineText, a => readSourceByte(this, a), stopLine);
   }
 
   /** The writable source-declared globals (`static`, `reg!`) and their

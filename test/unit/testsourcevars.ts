@@ -2,7 +2,7 @@ import assert from "assert";
 import { describe, it } from "mocha";
 import {
   GlobalVariable, SourceVariable, formatSourceValue, formatSourceVariableLine, functionAtPC,
-  globalVariablesOf, globalVariableTree, liveSourceVariables, sourceVariableTree, sourceVariablesOf,
+  globalVariablesOf, globalVariableTree, inlineSourceValues, liveSourceVariables, sourceVariableTree, sourceVariablesOf,
   writableGlobalVariablesOf
 } from "../../src/common/sourcevars";
 
@@ -103,5 +103,44 @@ describe('Source variables', function () {
     });
     assert.strictEqual(globalVariableTree([], read), null);
     assert.strictEqual(formatSourceVariableLine(globals[0], read), 'SCORE: u16 = $5678 (22136)');
+  });
+});
+
+describe('Inline source values', function () {
+  const mem: { [addr: number]: number } = { 0x10: 5, 0x11: 7 };
+  const read = (a: number) => mem[a] || 0;
+  const symbolmap = { main: 0x8000 };
+  const symbolsizes = { main: 0x20 };
+  const vars: SourceVariable[] = [
+    { name: 'i', type: 'u8', size: 1, function: 'main', addr: 0x10, range: [0x8000, 0x8020], line: 2 },
+    { name: 'sum', type: 'u8', size: 1, function: 'main', addr: 0x11, range: [0x8008, 0x8020], line: 3 },
+  ];
+  const text = ['fn main() {', '  let mut i = 0;', '  let mut sum = 0;', '  sum += i;', '  i += 1;'];
+  const lines = [
+    { line: 1, offset: 0x8000 }, { line: 2, offset: 0x8002 }, { line: 3, offset: 0x8008 },
+    { line: 4, offset: 0x8010 }, { line: 5, offset: 0x8018 },
+  ];
+  const run = (stop?: number) => inlineSourceValues(vars, 0x8010, symbolmap, symbolsizes, lines, l => text[l - 1], read, stop);
+
+  it('shows the variables a line names, with their values', function () {
+    const m = run(4);
+    assert.strictEqual(m.get(4), 'i = 5, sum = 7');
+  });
+  it('shows each variable once, on the line nearest the stop', function () {
+    const m = run(5);
+    assert.strictEqual(m.get(5), 'i = 5');
+    assert.strictEqual(m.get(4), 'sum = 7');
+    assert.strictEqual([...m.values()].join().split('i = ').length, 2);
+  });
+  it('skips a variable outside its live range and a line that does not name it', function () {
+    const m = run(2);
+    assert.strictEqual(m.get(2), 'i = 5'); // `sum` is not live until line 3's code
+    assert.strictEqual(m.has(3), true);
+    assert.strictEqual(m.has(1), false);
+  });
+  it('matches whole identifiers only', function () {
+    const t = text.slice(); t[4] = '  idx += 1;';
+    const m = inlineSourceValues(vars, 0x8010, symbolmap, symbolsizes, lines, l => t[l - 1], read, 5);
+    assert.strictEqual(m.has(5), false);
   });
 });

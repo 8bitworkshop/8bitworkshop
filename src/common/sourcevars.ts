@@ -261,3 +261,83 @@ export function globalVariableTree(vars: GlobalVariable[],
   read: (addr: number) => number): { [name: string]: any } | null {
   return vars.length ? variablesToTree(vars, read) : null;
 }
+
+/** A source line and the address where its code starts (one entry per listed line). */
+export interface LineOffset { line: number; offset: number }
+
+/**
+ * The code range of each source line: from its first listed address to the
+ * next listed address after it. Compilers list a line once per code run, so
+ * a line can have several ranges.
+ */
+export function lineCodeRanges(lines: LineOffset[]): Map<number, [number, number][]> {
+  const sorted = lines.filter(l => l.offset >= 0).sort((a, b) => a.offset - b.offset);
+  const out = new Map<number, [number, number][]>();
+  for (let i = 0; i < sorted.length; i++) {
+    let j = i + 1;
+    while (j < sorted.length && sorted[j].offset === sorted[i].offset) j++;
+    const end = j < sorted.length ? sorted[j].offset : sorted[i].offset + 1;
+    const list = out.get(sorted[i].line) || [];
+    list.push([sorted[i].offset, end]);
+    out.set(sorted[i].line, list);
+  }
+  return out;
+}
+
+function overlaps(a: [number, number], b: [number, number]): boolean {
+  return a[0] < b[1] && b[0] < a[1];
+}
+
+/** Does `name` appear in `text` as a whole identifier? */
+function mentions(text: string, name: string): boolean {
+  const re = new RegExp(`(^|[^A-Za-z0-9_])${name.replace(/[^A-Za-z0-9_]/g, '\\$&')}($|[^A-Za-z0-9_])`);
+  return re.test(text);
+}
+
+/**
+ * The variables to show at the end of source lines while stopped at `pc`, as
+ * `name = value` text keyed by 1-based line number.
+ *
+ * A variable is a candidate on a line when it is live at `pc` (so its home
+ * holds its value now), the line's own code lies in its live range (or the
+ * line has no known code), and the line's text names it. The live range
+ * alone would list nearly every variable on every line of a function; the
+ * name test keeps it to the lines that touch a variable.
+ *
+ * Each variable is then shown once, on its candidate line nearest `stopLine`
+ * (ties go to the earlier line), so a loop index is not repeated on every
+ * line that uses it. Without a `stopLine` the first candidate wins.
+ */
+export function inlineSourceValues(vars: SourceVariable[], pc: number,
+  symbolmap: { [name: string]: number }, symbolsizes: { [name: string]: number } | undefined,
+  lines: LineOffset[], lineText: (line: number) => string | null,
+  read: (addr: number) => number, stopLine?: number | null): Map<number, string> {
+  const live = liveSourceVariables(vars, pc, symbolmap, symbolsizes);
+  const result = new Map<number, string>();
+  if (!live.length) return result;
+  const codeRanges = lineCodeRanges(lines);
+  const candidates = [...new Set<number>([...codeRanges.keys(), ...live.map(v => v.line || 0)])]
+    .filter(l => l > 0).sort((a, b) => a - b);
+  const distance = (l: number) => stopLine == null ? 0 : Math.abs(l - stopLine);
+  const parts = new Map<number, string[]>();
+  for (const v of live) {
+    const val = formatSourceValue(v, read);
+    // a long array is the Locals tree's job, not a line's
+    if (typeof val !== 'string') continue;
+    const vr: [number, number][] = v.ranges && v.ranges.length ? v.ranges : v.range ? [v.range] : [];
+    let best = -1;
+    for (const line of candidates) {
+      const text = lineText(line);
+      if (!text || !mentions(text, v.name)) continue;
+      const ranges = codeRanges.get(line);
+      if (ranges && vr.length && !ranges.some(r => vr.some(x => overlaps(r, x)))) continue;
+      if (best < 0 || distance(line) < distance(best)) best = line;
+    }
+    if (best < 0) continue;
+    const list = parts.get(best) || [];
+    list.push(`${v.name} = ${val.replace(/^\$[0-9a-f]+ \((-?\d+)\)$/i, '$1')}`);
+    parts.set(best, list);
+  }
+  for (const [line, list] of parts) result.set(line, list.join(', '));
+  return result;
+}

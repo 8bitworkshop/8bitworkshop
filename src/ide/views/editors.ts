@@ -31,7 +31,7 @@ import { createIncludeLinkPlugin } from "./includedecorations";
 import { isMobileDevice, ProjectView } from "./baseviews";
 import { Shortcut } from "../shortcutbar";
 import { createTextTransformFilterEffect, textTransformFilterCompartment } from "./filters";
-import { debugGutterExtensions, clearDebugLine, showDebugLine, syncBreakpointMarkers } from "./debugline";
+import { debugGutterExtensions, clearDebugLine, showDebugLine, showInlineValues, syncBreakpointMarkers } from "./debugline";
 import { breakpointMarkers, bytes, clock, currentPcMarker, errorMarkers, ErrorInfo, offset, statusMarkers } from "./gutter";
 import { currentPc, errorMessages, errorSpans, highlightLines, showValue, tracedLines } from "./visuals";
 import { computeHeatLevels } from "./traceheat";
@@ -643,7 +643,20 @@ export class SourceEditor implements ProjectView {
       }
       showDebugLine(this.editor, line, moveCursor);
       this.currentDebugLine = line;
+      this.refreshInlineValues();
     }
+  }
+
+  /** Draw the stopped function's variable values at the ends of the lines
+   *  that name them. Only a halted program has values worth showing. */
+  refreshInlineValues() {
+    const p = platform as any;
+    if (!this.sourcefile || typeof p.getInlineSourceValues !== "function" || platform.isRunning()) return;
+    const doc = this.editor.state.doc;
+    const values = p.getInlineSourceValues(this.sourcefile.lines,
+      (n: number) => (n >= 1 && n <= doc.lines ? doc.line(n).text : null),
+      this.currentDebugLine && this.currentDebugLine.line);
+    showInlineValues(this.editor, values);
   }
 
   clearCurrentLine(moveCursor: boolean) {
@@ -655,6 +668,7 @@ export class SourceEditor implements ProjectView {
       this.currentDebugLine = null;
     }
     clearDebugLine(this.editor);
+    showInlineValues(this.editor, new Map());
   }
 
   getActiveLine(): SourceLocation {

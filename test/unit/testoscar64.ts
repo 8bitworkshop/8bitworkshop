@@ -1,7 +1,7 @@
 import assert from "assert";
 import { describe, it } from "mocha";
 import {
-  formatSourceValue, liveSourceVariables, sourceVariableAddress, sourceVariableTree, sourceVariablesOf
+  formatSourceValue, inlineSourceValues, liveSourceVariables, sourceVariableAddress, sourceVariableTree, sourceVariablesOf
 } from "../../src/common/sourcevars";
 import { parseOscar64Dbj } from "../../src/worker/tools/oscar64parse";
 
@@ -87,5 +87,23 @@ describe('Oscar64 debug info', function () {
     const tree = sourceVariableTree(vars, 0x8005, { main: 0x8000 }, { main: 0x20 }, read);
     assert.strictEqual(tree['i:u8'], '$34 (52)');
     assert.strictEqual(tree['score:i16'], '$0000 (0)');
+  });
+
+  it('draws each live variable once, near the stop line', function () {
+    const text: { [line: number]: string } = {
+      1: 'int main(int n) {', 10: '  int score = n * 2;', 12: '  for (byte i = 0; i < 4; i++)',
+      14: '    score += arr[i];', 18: '  return score;',
+    };
+    const lines = dbj.functions[0].lines.map(l => ({ line: l.line, offset: l.start }));
+    const mem: { [addr: number]: number } = { 0x9002: 0x34, 0x9003: 0x12, 0x0d: 3 };
+    const read = (addr: number) => addr == 0x24 ? 0x90 : mem[addr] || 0;
+    const m = inlineSourceValues(vars, 0x8005, { main: 0x8000 }, { main: 0x20 }, lines,
+      l => text[l] ?? null, read, 12);
+    assert.strictEqual(m.get(12), 'i = 52');
+    // `score` and `n` are named on 10, 14 and 18; 10 and 14 are both two
+    // lines from the stop, so the earlier one wins and neither is repeated
+    assert.strictEqual(m.get(10), 'score = 0, n = 3');
+    assert.strictEqual(m.has(1), false);
+    assert.strictEqual(m.get(14), 'arr = 00 00 34 12');
   });
 });
