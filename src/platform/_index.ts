@@ -11,6 +11,7 @@ export function importPlatform(name: string) : Promise<any> {
       case "c64": return import("../platform/c64");
       case "channelf": return import("../platform/channelf");
       case "coleco": return import("../platform/coleco");
+      case "coco": return import("../platform/coco");
       case "cpc": return import("../platform/cpc");
       case "devel": return import("../platform/devel");
       case "exidy": return import("../platform/exidy");

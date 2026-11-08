@@ -190,10 +190,13 @@ export function linkLWLINK(step: BuildStep): BuildStepResult {
         populateFiles(step, FS);
         populateExtraFiles(step, FS, params.extra_link_files);
         var libargs = params.extra_link_args || [];
+        // raw image by default (ROM platforms); a platform can ask for a
+        // DECB .bin instead (coco), whose blocks carry the load addresses
+        // and the EXEC address that --entry names.
         var args = [
             '-L.',
             '--entry=program_start',
-            '--raw',
+            '--format=' + (params.link_format || 'raw'),
             '--output=main',
             '--map=main.map'].concat(libargs, step.args);
         // //#flag ld / //#symbol ld

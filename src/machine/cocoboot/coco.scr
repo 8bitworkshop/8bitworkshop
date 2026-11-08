@@ -1,0 +1,12 @@
+define basesympat s_%s
+define lensympat l_%s
+section jumptab load a000
+section e_waitkey load a1b1
+section e_readline load a390
+section e_clsb load a91c
+section e_cls load a928
+section e_sound load a956
+section e_joystk load a9de
+section code load aa00
+section vectors load bff0
+entry program_start

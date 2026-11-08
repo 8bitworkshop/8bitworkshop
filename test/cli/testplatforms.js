@@ -35,6 +35,7 @@ var _coleco = require('gen/platform/coleco.js');
 var _sms = require('gen/platform/sms.js');
 var _c64 = require('gen/platform/c64.js');
 var _vectrex = require('gen/platform/vectrex.js');
+var _coco = require('gen/platform/coco.js');
 var _zx = require('gen/platform/zx.js');
 // loadScript() evaluates scripts (vcs loads javatari/javatari.js) from the repo root
 require('gen/tools/nodemock.js').mockScripts();
@@ -379,6 +380,16 @@ describe('Platform Replay', () => {
         keycallback(Keys.RIGHT.c, Keys.VK_RIGHT.c, 1);
       }
     });
+  });
+  it('Should run coco', async () => {
+    // hello.c prints two lines, then echoes what is typed: press 'Q'
+    var platform = await testPlatform('coco', 'hello.c.rom', 62, (platform, frameno) => {
+      if (frameno == 40) keycallback(81, 81, 1); // Q down
+      if (frameno == 45) keycallback(81, 81, 64); // Q up
+    });
+    assert.equal(0x48, platform.readAddress(0x400)); // 'H' of HELLO
+    // the typed Q is echoed at the start of the fourth text row
+    assert.equal(0x51, platform.readAddress(0x400 + 3 * 32));
   });
   it('Should run atari7800', async () => {
     var platform = await testPlatform('atari7800', 'sprites.dasm.rom', 92, (platform, frameno) => {

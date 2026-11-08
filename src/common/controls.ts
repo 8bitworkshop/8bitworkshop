@@ -78,6 +78,13 @@ export const PLATFORM_CONTROLS: { [platform: string]: ControlHint[] } = {
     { keys: [ARROWS], action: 'Joystick' },
     { keys: ['Z X C V'], action: 'Buttons' },
   ],
+  coco: [
+    { keys: ['Any key'], action: 'Keyboard' },
+    { keys: ['Esc'], action: 'Break' },
+    { keys: ['Home'], action: 'Clear' },
+    { keys: ['Mouse'], action: 'Joystick' },
+    { keys: ['Click'], action: 'Fire' },
+  ],
   atari8: [
     { keys: [ARROWS], action: 'Joystick' },
     { keys: ['Shift'], action: 'Button' },

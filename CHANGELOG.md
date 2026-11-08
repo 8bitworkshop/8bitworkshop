@@ -6,8 +6,14 @@
 
 See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 
+### New platforms
+
+- **Tandy Color Computer 1/2** (`?platform=coco`): C programs build with CMOC into a DECB `.bin` (the file a real CoCo or any other emulator loads) and run on a new emulator of the MC6809E, MC6883 SAM, MC6847 VDG and the two MC6821 PIAs. It shows the 32x16 text screen, semigraphics 4 and all eight graphics modes (CG1-CG6, RG1-RG6), reads the keyboard matrix, takes the mouse as the right joystick, plays the 6-bit DAC, and honors the SAM's double-speed bit. There is no Microsoft BASIC: a small boot ROM of our own (`src/machine/cocoboot/boot.lwasm`, built into `src/machine/cocorom.ts` by `scripts/build-coco-rom.mjs`) sets up the hardware, runs the program, and provides the ROM entry points CMOC's library calls at their usual addresses (`inkey`, `printf`, `readline`, `cls`, `sound`, `readJoystickPositions`). Programs that need BASIC can load a real Color BASIC ROM with `8bws run --bios` or a project's `coco.rom`. Presets: Hello World, Graphics Modes, Joystick and Sound. Coco 3 (GIME) is not emulated.
+- `8bws run`'s `paddle` command moved the paddles only on the next frame the platform polled, which a timeline-driven run never does, so paddle and mouse-joystick values never reached the program. They are delivered at once now.
+
 ### Builds and tools
 
+- 6809 platforms can ask for a DECB `.bin` from lwlink instead of a raw image (`link_format: 'decb'` in `PLATFORM_PARAMS`).
 - oscar64 builds with `-O0 -Oz -Op -Oo` instead of `-O1 -Oz -Op -Ox`, so its debug info (`.dbj`) lists local variables with their scope lines, not just parameters, and variables without a scope (parameters) are live over their own function. The size flags `-Oz -Op -Oo` keep the debug info. `//#flag c -O2` in a source file now takes effect for oscar64 (it ignored `//#flag` before) and overrides the default.
 - Disassembly names local variables (urust) in operands, e.g. `LDA score+1`, in the IDE's disassembly view, the `8bws` run script (`dis`, `step`, `trace`) and the VS Code disassembly. A local is resolved in the frame of the instruction's own function rather than the PC's, and wins over a global at the same address.
 - Stepping and breakpoints now work inside urust's `rs8` modules (e.g. `rs8::gfx::span`). A stop in a module opens its read-only window, which shows the yellow arrow and purple bar and takes gutter breakpoints like the main file; before, the IDE did not find a window for the module and fell back to the disassembly. Modules sharing a filename (`rs8/console.rs`, `rs8/apple2/console.rs`) are told apart by path.

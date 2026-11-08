@@ -1,0 +1,14 @@
+#include <cmoc.h>
+#include <coco.h>
+
+int main() {
+  cls(1);
+  printf("HELLO!\n");
+
+  // main loop
+  while (1) {
+    // code here
+  }
+
+  return 0;
+}

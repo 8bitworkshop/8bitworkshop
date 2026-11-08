@@ -1,0 +1,535 @@
+*******************************************************************************
+* Boot ROM for the 8bitworkshop CoCo 1/2 emulator.
+*
+* This is NOT Microsoft's Color BASIC. It is a small ROM of our own that sets
+* the hardware up, runs the loaded program, and provides the handful of BASIC
+* ROM entry points that CMOC's runtime calls, at the addresses the real ROM
+* has them so that compiled programs work unchanged:
+*
+*   [$A000] POLCAT    poll the keyboard           (inkey)
+*   [$A002] CHROUT    print a character           (putchar, printf)
+*   $A1B1   waitkey   wait for a key, blink cursor (waitkey)
+*   $A390   readline  read a line into LINBUF     (readline)
+*   $A91C   CLS       clear screen, color in B    (cls)
+*   $A928   CLS       clear screen to green       (cls)
+*   $A956   SOUND     tone in $8C, duration in $8D (sound)
+*   $A9DE   JOYSTK    read joysticks into POTVAL  (readJoystickPositions)
+*
+* The emulator loads a program into RAM and puts its EXEC address at $009D;
+* we JSR to it after initializing. A cartridge with "DK" at $C000 is started
+* the way the real ROM does it.
+*
+* Build:  node scripts/build-coco-rom.mjs   (writes src/machine/cocorom.ts)
+* The link script (coco.scr) places each section at a fixed address.
+*******************************************************************************
+
+* RAM locations. The ones CMOC or programs rely on are where Color BASIC has them.
+CURPOS          EQU     $0088           cursor address in the text screen
+SNDTONE         EQU     $008C           SOUND: tone
+SNDDUR          EQU     $008D           SOUND: duration (word)
+EXEC            EQU     $009D           address of the program to run
+VSWI3           EQU     $0100           RAM interrupt vectors (JMP instructions)
+VSWI2           EQU     $0103
+VSWI            EQU     $0106
+VNMI            EQU     $0109
+VIRQ            EQU     $010C
+VFIRQ           EQU     $010F
+TIMER           EQU     $0112           60 Hz tick counter (word)
+POTVAL          EQU     $015A           joystick values 0-63: right X, Y, left X, Y
+LINBUF          EQU     $02DC           line buffer for readline
+* our own variables, in the gap BASIC uses for its keyboard roll-over table
+LASTKEY         EQU     $0160           index+1 of the key held at the last poll
+SHIFT           EQU     $0161           $40 while SHIFT is down
+COL             EQU     $0162           keyboard column being scanned
+CURSAVE         EQU     $0163           character under the blinking cursor
+CASEFLG         EQU     $0164           nonzero = lower case mode (SHIFT-0)
+JBIT            EQU     $0165           joystick successive approximation bit
+
+SCREEN          EQU     $0400
+SCRNEND         EQU     $0600
+
+PIA0            EQU     $FF00
+PIA1            EQU     $FF20
+
+*------------------------------------------------------------------------------
+* The table of ROM routine addresses at the start of Color BASIC
+*------------------------------------------------------------------------------
+        SECTION jumptab
+        FDB     POLCAT                  $A000
+        FDB     CHROUT                  $A002
+        FDB     DORTS                   $A004 CSRDON
+        FDB     DORTS                   $A006 BLKIN
+        FDB     DORTS                   $A008 BLKOUT
+        FDB     DORTS                   $A00A JOYIN
+        FDB     DORTS                   $A00C WRTLDR
+        ENDSECTION
+
+* fixed-address entry points, each just a jump into the code below
+        SECTION e_waitkey
+        JMP     WAITKEY                 $A1B1
+        ENDSECTION
+        SECTION e_readline
+        JMP     READLN                  $A390
+        ENDSECTION
+        SECTION e_clsb
+        JMP     CLSB                    $A91C
+        ENDSECTION
+        SECTION e_cls
+        JMP     CLSD                    $A928
+        ENDSECTION
+        SECTION e_sound
+        JMP     SOUND                   $A956
+        ENDSECTION
+        SECTION e_joystk
+        JMP     JOYSTK                  $A9DE
+        ENDSECTION
+
+*------------------------------------------------------------------------------
+* The interrupt vectors, as in Color BASIC: the CPU vectors point at JMP
+* instructions in RAM that programs may patch.
+*------------------------------------------------------------------------------
+        SECTION vectors
+        FDB     0                       $FFF0 reserved
+        FDB     VSWI3                   $FFF2
+        FDB     VSWI2                   $FFF4
+        FDB     VFIRQ                   $FFF6
+        FDB     VIRQ                    $FFF8
+        FDB     VSWI                    $FFFA
+        FDB     VNMI                    $FFFC
+        FDB     RESET                   $FFFE
+        ENDSECTION
+
+        SECTION code
+
+        EXPORT  program_start
+program_start
+
+*------------------------------------------------------------------------------
+* Reset
+*------------------------------------------------------------------------------
+RESET   ORCC    #$50                    mask IRQ and FIRQ
+        LDS     #$7F00
+        CLRA
+        TFR     A,DP
+
+* PIAs, as Color BASIC leaves them
+        LDX     #PIA0
+        CLR     1,X                     control registers first, so that
+        CLR     3,X                     the DDR writes below hit the DDRs
+        CLR     $21,X
+        CLR     $23,X
+        CLR     ,X                      PIA0 A: keyboard rows + comparator, inputs
+        LDA     #$FF
+        STA     2,X                     PIA0 B: keyboard columns, outputs
+        LDA     #$FE
+        STA     $20,X                   PIA1 A: DAC + cassette out, rs232 in
+        LDA     #$F8
+        STA     $22,X                   PIA1 B: VDG mode pins are outputs
+        LDA     #$34
+        STA     1,X                     PIA0 CRA: data regs, HS interrupt off
+        LDA     #$35
+        STA     3,X                     PIA0 CRB: data regs, FS interrupt on (falling)
+        LDA     #$34
+        STA     $21,X                   PIA1 CRA: cassette motor off
+        LDA     #$3C
+        STA     $23,X                   PIA1 CRB: sound enabled
+        LDA     #$FF
+        STA     2,X                     no keyboard column selected
+        LDA     #$80
+        STA     $20,X                   DAC at mid-scale (silence)
+        CLR     $22,X                   VDG: alphanumeric, color set 0
+
+* SAM: text mode, screen at $0400, 64K, slow clock, ROM map
+        LDX     #SAMTAB
+SAM1    LDY     ,X++
+        BEQ     SAM2
+        STA     ,Y                      any data: the address does the work
+        BRA     SAM1
+SAM2
+
+* RAM vectors
+        LDX     #VTAB
+VEC1    LDY     ,X++
+        BEQ     VEC2
+        LDA     #$7E                    JMP
+        STA     ,Y
+        LDD     ,X++
+        STD     1,Y
+        BRA     VEC1
+VEC2
+
+        CLRA
+        CLRB
+        STD     TIMER
+        STA     LASTKEY
+        STA     CASEFLG
+        LDA     #$60
+        JSR     FILLSCR
+
+* a cartridge ("DK" at $C000) starts itself
+        LDD     $C000
+        CMPD    #$444B
+        BNE     NOCART
+        ANDCC   #$AF
+        JMP     $C002
+NOCART  ANDCC   #$AF                    interrupts on: the 60 Hz tick runs
+        LDX     EXEC
+        BNE     RUN
+        LDX     #BANNER
+        BSR     PRINTS
+        BRA     TERM
+RUN     JSR     ,X                      the program; main() returns here
+TERM    JSR     WAITKEY                 then act as a dumb terminal
+        JSR     CHROUT
+        BRA     TERM
+
+BANNER  FCC     "8BITWORKSHOP COCO 1/2"
+        FCB     13
+        FCC     "NO PROGRAM LOADED"
+        FCB     13,13,0
+
+* print the NUL-terminated string at X
+PRINTS  LDA     ,X+
+        BEQ     PRTS9
+        JSR     CHROUT
+        BRA     PRINTS
+PRTS9   RTS
+
+* SAM bits to write (even address clears, odd sets), ended by 0
+SAMTAB  FDB     $FFC0,$FFC2,$FFC4       V = 0: text
+        FDB     $FFC6,$FFC9,$FFCA       F = 2: display at $0400
+        FDB     $FFCC,$FFCE,$FFD0,$FFD2
+        FDB     $FFD4                   page 0
+        FDB     $FFD6,$FFD8             slow clock
+        FDB     $FFDA,$FFDD             64K
+        FDB     $FFDE                   ROM map
+        FDB     0
+
+* RAM interrupt vectors: address, then target
+VTAB    FDB     VSWI3,SPURIOUS
+        FDB     VSWI2,SPURIOUS
+        FDB     VSWI,SPURIOUS
+        FDB     VNMI,SPURIOUS
+        FDB     VIRQ,IRQSVC
+        FDB     VFIRQ,SPURIOUS
+        FDB     0
+
+SPURIOUS RTI
+DORTS   RTS
+
+*------------------------------------------------------------------------------
+* 60 Hz interrupt: PIA0 CB1 (field sync) bumps TIMER
+*------------------------------------------------------------------------------
+IRQSVC  LDA     PIA0+3
+        BPL     IRQ9                    not the field sync
+        LDA     PIA0+2                  reading port B clears the flag
+        LDD     TIMER
+        ADDD    #1
+        STD     TIMER
+IRQ9    RTI
+
+*------------------------------------------------------------------------------
+* Screen: fill the text screen with A, home the cursor. Trashes X.
+*------------------------------------------------------------------------------
+FILLSCR LDX     #SCREEN
+FILL1   STA     ,X+
+        CMPX    #SCRNEND
+        BNE     FILL1
+        LDX     #SCREEN
+        STX     CURPOS
+        RTS
+
+* CLS with a color in B: 0 = black, 1-8 = green yellow blue red buff cyan magenta orange
+CLSB    TSTB
+        BNE     CLSB1
+        LDA     #$80
+        BRA     CLSB9
+CLSB1   DECB
+        ANDB    #7
+        ASLB
+        ASLB
+        ASLB
+        ASLB
+        ORB     #$8F
+        TFR     B,A
+        BRA     CLSB9
+CLSD    LDA     #$60                    green blank
+CLSB9   PSHS    X
+        BSR     FILLSCR
+        PULS    X,PC
+
+* scroll the screen up a line; returns X at the start of the last line
+SCROLL  LDX     #SCREEN+32
+SCR1    LDD     ,X++
+        STD     -34,X
+        CMPX    #SCRNEND
+        BLO     SCR1
+        LDA     #$60
+        LDX     #SCRNEND-32
+SCR2    STA     ,X+
+        CMPX    #SCRNEND
+        BLO     SCR2
+        LDX     #SCRNEND-32
+        RTS
+
+*------------------------------------------------------------------------------
+* CHROUT: print the character in A. Preserves everything but CC.
+*------------------------------------------------------------------------------
+CHROUT  PSHS    X,D
+        LDX     CURPOS
+        CMPA    #$0D
+        BEQ     CRLF
+        CMPA    #$08
+        BEQ     BKSP
+        CMPA    #$0C
+        BEQ     CHCLS
+        CMPA    #$20
+        BLO     CHDONE                  other control characters do nothing
+        CMPA    #$80
+        BHS     CHPUT                   semigraphics go out as they are
+        CMPA    #$60
+        BHS     CHLOW                   lower case shows as reverse video
+        CMPA    #$40
+        BHS     CHPUT                   @ A-Z [ \ ] ^ _
+        ADDA    #$40                    space ! " ... ? -> $60-$7F
+        BRA     CHPUT
+CHLOW   SUBA    #$60
+CHPUT   STA     ,X+
+        CMPX    #SCRNEND
+        BLO     CHSAVE
+        JSR     SCROLL
+CHSAVE  STX     CURPOS
+CHDONE  PULS    D,X,PC
+CRLF    TFR     X,D
+        ANDB    #$E0                    start of this line
+        ADDD    #32                     next line
+        TFR     D,X
+        CMPX    #SCRNEND
+        BLO     CHSAVE
+        JSR     SCROLL
+        BRA     CHSAVE
+BKSP    CMPX    #SCREEN
+        BLS     CHSAVE
+        LDA     #$60
+        STA     ,-X
+        BRA     CHSAVE
+CHCLS   LDA     #$60
+        JSR     FILLSCR
+        BRA     CHDONE
+
+*------------------------------------------------------------------------------
+* Keyboard. The matrix is 7 rows (PIA0 port A, bits 0-6) by 8 columns (port B,
+* active low). The tables are indexed row*8 + column.
+*------------------------------------------------------------------------------
+KEYTAB  FCC     "@ABCDEFG"
+        FCC     "HIJKLMNO"
+        FCC     "PQRSTUVW"
+        FCB     $58,$59,$5A,$5E,$0A,$08,$09,$20      X Y Z UP DOWN LEFT RIGHT SPACE
+        FCC     "01234567"
+        FCC     "89:;,-./"
+        FCB     $0D,$0C,$03,0,0,0,0,0                ENTER CLEAR BREAK
+SHFTAB  FCC     "@abcdefg"
+        FCC     "hijklmno"
+        FCC     "pqrstuvw"
+        FCB     $78,$79,$7A,$5F,$5B,$15,$5D,$20      x y z . [ (erase line) ]
+        FCB     $30,$21,$22,$23,$24,$25,$26,$27      0 ! " # $ % & '
+        FCB     $28,$29,$2A,$2B,$3C,$3D,$3E,$3F      ( ) * + < = > ?
+        FCB     $0D,$5F,$03,0,0,0,0,0
+
+* POLCAT: A = a newly pressed key (ASCII), or 0 with Z set. Trashes nothing else.
+POLCAT  PSHS    X,B
+        LDA     #$7F                    column 7 holds SHIFT (row 6)
+        STA     PIA0+2
+        LDA     PIA0
+        ANDA    #$40
+        EORA    #$40                    $40 if SHIFT is down
+        STA     SHIFT
+        CLR     COL
+        LDB     #$FE                    strobe column 0
+PSCAN   STB     PIA0+2
+        LDA     PIA0
+        COMA
+        ANDA    #$7F                    rows with a key down
+        PSHS    B
+        LDB     COL
+        CMPB    #7
+        BNE     PS1
+        ANDA    #$3F                    column 7: SHIFT is not a key
+PS1     PULS    B
+        TSTA
+        BNE     PFOUND
+        ASLB
+        ORB     #1                      next column
+        INC     COL
+        LDA     COL
+        CMPA    #8
+        BNE     PSCAN
+        CLR     LASTKEY                 nothing down
+        BRA     PNONE
+PFOUND  CLRB
+PROW    LSRA
+        BCS     PROW2
+        INCB
+        BRA     PROW
+PROW2   ASLB                            B = row
+        ASLB
+        ASLB
+        ADDB    COL                     B = row*8 + column
+        LDX     #KEYTAB
+        TST     SHIFT
+        BEQ     PF3
+        LDX     #SHFTAB
+PF3     INCB
+        CMPB    LASTKEY
+        BEQ     PNONE                   still holding the key we reported
+        STB     LASTKEY
+        DECB
+        LDA     B,X
+        TST     SHIFT
+        BEQ     PF4
+        CMPB    #32                     SHIFT-0 toggles lower case
+        BNE     PF4
+        COM     CASEFLG
+        BRA     PNONE
+PF4     TST     CASEFLG
+        BEQ     PEXIT
+        PSHS    A                       swap the case of letters
+        ANDA    #$DF
+        CMPA    #$41
+        BLO     PF5
+        CMPA    #$5A
+        BHI     PF5
+        PULS    A
+        EORA    #$20
+        BRA     PEXIT
+PF5     PULS    A
+        BRA     PEXIT
+PNONE   CLRA
+PEXIT   TSTA
+        PULS    B,X,PC
+
+*------------------------------------------------------------------------------
+* WAITKEY: wait for a key with a blinking cursor. Returns it in A.
+*------------------------------------------------------------------------------
+WAITKEY PSHS    X,B
+        LDX     CURPOS
+        LDA     ,X
+        STA     CURSAVE
+WK1     LDA     TIMER+1
+        ANDA    #$10
+        BEQ     WK2
+        LDA     #$AF                    blue block
+        BRA     WK3
+WK2     LDA     CURSAVE
+WK3     STA     ,X
+        JSR     POLCAT
+        BEQ     WK1
+        LDB     CURSAVE
+        STB     ,X                      take the cursor away
+        PULS    B,X,PC
+
+*------------------------------------------------------------------------------
+* READLN: read a line into LINBUF+1, NUL terminated, echoing it.
+*------------------------------------------------------------------------------
+READLN  PSHS    X,D
+        LDX     #LINBUF+1
+        CLRB
+RL1     JSR     WAITKEY
+        CMPA    #$0D
+        BEQ     RLEND
+        CMPA    #$08
+        BEQ     RLBS
+        CMPA    #$20
+        BLO     RL1
+        CMPB    #249                    room left?
+        BHS     RL1
+        STA     ,X+
+        INCB
+        JSR     CHROUT
+        BRA     RL1
+RLBS    TSTB
+        BEQ     RL1
+        LEAX    -1,X
+        DECB
+        LDA     #$08
+        JSR     CHROUT
+        BRA     RL1
+RLEND   CLR     ,X
+        LDA     #$0D
+        JSR     CHROUT
+        PULS    X,D,PC
+
+*------------------------------------------------------------------------------
+* JOYSTK: read the four joystick axes into POTVAL, 0-63 each. The hardware has
+* a comparator (PIA0 A bit 7) that tells whether the selected axis is above the
+* 6-bit DAC, so we find each value by successive approximation. The axis is
+* chosen by PIA0 CA2 (bit 0) and CB2 (bit 1).
+*------------------------------------------------------------------------------
+JOYSTK  PSHS    X,D
+        LDX     #POTVAL
+        CLRB
+JY1     LDA     #$34
+        BITB    #1
+        BEQ     JY2
+        ORA     #8
+JY2     STA     PIA0+1
+        LDA     #$35
+        BITB    #2
+        BEQ     JY3
+        ORA     #8
+JY3     STA     PIA0+3
+        CLR     ,X
+        LDA     #32
+        STA     JBIT
+JY4     LDA     ,X
+        ORA     JBIT                    try this value
+        PSHS    A
+        ASLA
+        ASLA                            DAC is bits 7-2
+        STA     PIA1
+        LDA     PIA0
+        BPL     JY5                     comparator low: axis is below it
+        PULS    A
+        STA     ,X
+        BRA     JY6
+JY5     LEAS    1,S
+JY6     LSR     JBIT
+        BNE     JY4
+        LEAX    1,X
+        INCB
+        CMPB    #4
+        BNE     JY1
+        LDA     #$80
+        STA     PIA1                    DAC back to silence
+        PULS    X,D,PC
+
+*------------------------------------------------------------------------------
+* SOUND: a square wave on the DAC. The tone (1-255, higher is higher pitch) is
+* at $8C and the duration, in periods, at $8D.
+*------------------------------------------------------------------------------
+SOUND   PSHS    X,D
+        LDX     SNDDUR
+        BEQ     SND9
+SND1    LDA     #$C0
+        STA     PIA1
+        BSR     SDELAY
+        LDA     #$40
+        STA     PIA1
+        BSR     SDELAY
+        LEAX    -1,X
+        BNE     SND1
+SND9    LDA     #$80
+        STA     PIA1
+        PULS    X,D,PC
+SDELAY  LDB     #255
+        SUBB    SNDTONE
+        BNE     SD1
+        INCB
+SD1     LDA     #6
+SD2     DECA
+        BNE     SD2
+        DECB
+        BNE     SD1
+        RTS
+
+        ENDSECTION

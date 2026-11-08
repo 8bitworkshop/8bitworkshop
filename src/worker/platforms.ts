@@ -338,7 +338,23 @@ export var PLATFORM_PARAMS = {
       extra_compile_args: ['--vectrex'],
       extra_link_args: ['-svectrex.scr', '-lcmoc-crt-vec', '-lcmoc-std-vec'],
     },
-    'x86': {    
+    'coco': {
+      // Tandy Color Computer 1/2: cmoc's Extended Color BASIC (ecb) target,
+      // linked as a DECB .bin that the emulator loads straight into RAM.
+      arch: '6809',
+      code_start: 0x2800,   // cmoc's default for a DECB program (above the PMODE pages)
+      rom_size: 0x5800,     // $2800-$7FFF
+      stack_end: 0x7f00,
+      link_format: 'decb',
+      // cmoc's own headers say #include <cmoc.h>; the library files sit in mcpp's cwd.
+      // coco.h hides everything unless _COCO_BASIC_ is set, which cmoc defines
+      // for itself but mcpp (which runs first) has to be told.
+      extra_preproc_args: ['-I', '.', '-D', '_COCO_BASIC_=1', '-D', '_CMOC_VERSION_=1067'],
+      extra_compile_files: ['assert.h','cmoc.h','coco.h','stdarg.h'],
+      extra_link_files: ['coco.scr', 'libcmoc-crt-ecb.a', 'libcmoc-std-ecb.a'],
+      extra_link_args: ['-scoco.scr', '-lcmoc-crt-ecb', '-lcmoc-std-ecb'],
+    },
+    'x86': {
       arch: 'x86',
     },
     'zx': {

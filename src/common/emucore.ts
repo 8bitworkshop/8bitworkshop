@@ -366,7 +366,11 @@ export class EmuCore {
 
   /** Move the paddles (x, y in 0..255) and press buttons; ignored if the platform has none. */
   setPaddles(x: number, y: number, buttons: boolean[]) {
-    if (this.acceptsPaddles()) this.platform.setPaddles(x, y, buttons);
+    if (!this.acceptsPaddles()) return;
+    this.platform.setPaddles(x, y, buttons);
+    // A platform hands these to its machine in pollControls(), once per frame,
+    // but the timeline steps the machine without it. Deliver them now.
+    (this.platform as any).pollControls?.();
   }
 
   /** Clock cycles since power-up, for platforms that count them (HDL). */

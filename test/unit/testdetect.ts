@@ -42,6 +42,13 @@ describe('detect', () => {
     assert.strictEqual(d[0].mainFile, 'game.c');
   });
 
+  it('finds the Color Computer from the CMOC header', async () => {
+    var d = await detectProject(files({ 'game.c': '#include <cmoc.h>\n#include <coco.h>\nint main() { cls(1); return 0; }\n' }));
+    assert.strictEqual(d[0].platform, 'coco');
+    assert.ok(isClearWinner(d));
+    assert.strictEqual(d[0].mainFile, 'game.c');
+  });
+
   it('finds the VCS from TIA registers', async () => {
     var d = await detectProject(files({ 'game.dasm': '  processor 6502\n  sta WSYNC\n  sta COLUBK\n' }));
     assert.strictEqual(d[0].platform, 'vcs');

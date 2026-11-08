@@ -41,6 +41,7 @@ var _coleco = require('gen/platform/coleco.js');
 var _sms = require('gen/platform/sms.js');
 var _c64 = require('gen/platform/c64.js');
 var _vectrex = require('gen/platform/vectrex.js');
+var _coco = require('gen/platform/coco.js');
 var _zx = require('gen/platform/zx.js');
 var _atari8 = require('gen/platform/atari8.js');
 var util = require('gen/common/util.js');

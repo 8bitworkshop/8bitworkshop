@@ -75,6 +75,7 @@ const SYSTEM_HEADERS: { [header: string]: string[] } = {
   'vcs.h': ['vcs'],
   'macro.h': ['vcs'],
   'vectrex.h': ['vectrex'],
+  'coco.h': ['coco'],
 };
 
 // cc65 targets (cl65 -t / --target) and the platforms they build for

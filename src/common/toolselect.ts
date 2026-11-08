@@ -179,6 +179,7 @@ const PLATFORM_TOOLS: { [platform: string]: ToolSelector } = {
   // 6809
   'williams': getToolForFilename_6809,
   'vectrex': getToolForFilename_6809,
+  'coco': getToolForFilename_6809,
   // other
   'arm32': getToolForFilename_arm32,
   'channelf': getToolForFilename_channelf,
