@@ -379,7 +379,7 @@ var PostByte = function() {
              addr = 0;
              break;
           case 0xF: /* EA = [,address] */
-             T += 5;
+             T += 2; // +3 for indirect below makes 5 total, per the manual
              addr = fetch16();
              break;
           } /* switch */
@@ -431,7 +431,7 @@ var oINC = function(b) {
    b &= 0xff;
    CC &= ~(F_ZERO | F_OVERFLOW | F_NEGATIVE);
    CC |= flagsNZ[b];
-   if (b === 0 || b == 0x80) CC |= F_OVERFLOW;
+   if (b == 0x80) CC |= F_OVERFLOW; // only 0x7f -> 0x80 overflows
    return b;
 };
 var oDEC = function(b) {
@@ -439,7 +439,7 @@ var oDEC = function(b) {
    b &= 0xff;
    CC &= ~(F_ZERO | F_OVERFLOW | F_NEGATIVE);
    CC |= flagsNZ[b];
-   if (b === 0x7f || b == 0xff) CC |= F_OVERFLOW;
+   if (b === 0x7f) CC |= F_OVERFLOW; // only 0x80 -> 0x7f overflows
    return b;
 };
 var oSUB = function(b,v) {
@@ -524,9 +524,9 @@ var oNEG = function(b) {
     CC &= ~(F_CARRY | F_ZERO | F_OVERFLOW | F_NEGATIVE);
    if (b == 0x80)
       CC |= F_OVERFLOW;
-   b = ((~b)&0xff) + 1;
-   if (b === 0) CC |= F_ZERO;
-   if (b & 0x80) CC |= F_NEGATIVE | F_CARRY;
+   b = (((~b)&0xff) + 1) & 0xff; // mask: NEG 0 gives 0x100 before masking
+   CC |= flagsNZ[b];
+   if (b !== 0) CC |= F_CARRY; // C = borrow, set for any nonzero operand
    return b;
 };
 
@@ -548,7 +548,7 @@ var oASL = function(b) {
     var temp = b;
     CC &= ~(F_ZERO | F_CARRY | F_NEGATIVE | F_OVERFLOW);
     if (b & 0x80) CC |= F_CARRY;
-    b <<= 1;
+    b = (b << 1) & 0xff; // mask so flagsNZ lookup sees N and Z
     CC |= flagsNZ[b];
     if ((b ^ temp) & 0x80) CC|=F_OVERFLOW;
     return b;
@@ -558,7 +558,7 @@ var oROL = function(b) {
     var oldc = CC&F_CARRY;
     CC &= ~(F_ZERO | F_CARRY | F_NEGATIVE | F_OVERFLOW);
     if (b & 0x80) CC |= F_CARRY;
-    b = b<<1 | oldc;
+    b = ((b << 1) | (oldc ? 1 : 0)) & 0xff; // mask so flagsNZ lookup sees N and Z
     CC |= flagsNZ[b];
     if ((b ^ temp) & 0x80) CC|=F_OVERFLOW;
     return b;
@@ -691,7 +691,7 @@ var step = function() {
             if( nhi>0x80 && nlo>0x09 ) cf |= 0x60;
             if( nhi>0x90 || CC & 0x01 ) cf |= 0x60;
             addr = cf + rA;
-            CC  &= ~(F_CARRY | F_NEGATIVE | F_ZERO | F_OVERFLOW);
+            CC  &= ~(F_NEGATIVE | F_ZERO | F_OVERFLOW); // C is preserved, only set below
             if (addr & 0x100)
                CC  |= F_CARRY;
             rA = addr & 0xff;
@@ -705,8 +705,7 @@ var step = function() {
             break;
         case 0x1D: //SEX
             rA = (rB & 0x80)?0xff:0;
-            flagsNZ16(getD());
-            CC &= ~F_OVERFLOW;
+            flagsNZ16(getD()); // V is unaffected
             break;
         case 0x1E: //EXG
             pb = fetch();
@@ -1429,6 +1428,7 @@ var step = function() {
         case 0xDD: //STD direct
             addr = dpadd();
             WriteWord(addr, getD());
+            flagsNZ16(getD());
             CC&=~F_OVERFLOW;
         break;
         case 0xDE: //LDU direct
@@ -1506,6 +1506,7 @@ var step = function() {
         case 0xED: //STD indexed
             addr = PostByte();
             WriteWord(addr, getD());
+            flagsNZ16(getD());
             CC&=~F_OVERFLOW;
         break;
         case 0xEE: //LDU indexed
@@ -1585,6 +1586,7 @@ var step = function() {
         case 0xFD: //STD extended
             addr = fetch16();
             WriteWord(addr, getD());
+            flagsNZ16(getD());
             CC&=~F_OVERFLOW;
         break;
         case 0xFE: //LDU extended
@@ -1611,59 +1613,59 @@ var step = function() {
                         break;
                     case 0x22: //BHI
                         addr = signed16(fetch16());
-                        if (!(CC&(F_CARRY | F_ZERO))) PC += addr;
+                        if (!(CC&(F_CARRY | F_ZERO))) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x23: //BLS
                         addr = signed16(fetch16());
-                        if (CC&(F_CARRY | F_ZERO)) PC += addr;
+                        if (CC&(F_CARRY | F_ZERO)) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x24: //BCC
                         addr = signed16(fetch16());
-                        if (!(CC&F_CARRY)) PC += addr;
+                        if (!(CC&F_CARRY)) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x25: //BCS
                         addr = signed16(fetch16());
-                        if (CC&F_CARRY) PC += addr;
+                        if (CC&F_CARRY) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x26: //BNE
                         addr = signed16(fetch16());
-                        if (!(CC&F_ZERO)) PC += addr;
+                        if (!(CC&F_ZERO)) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x27: //BEQ
                         addr = signed16(fetch16());
-                        if (CC&F_ZERO) PC += addr;
+                        if (CC&F_ZERO) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x28: //BVC
                         addr = signed16(fetch16());
-                        if (!(CC&F_OVERFLOW)) PC += addr;
+                        if (!(CC&F_OVERFLOW)) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x29: //BVS
                         addr = signed16(fetch16());
-                        if (CC&F_OVERFLOW) PC += addr;
+                        if (CC&F_OVERFLOW) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x2A: //BPL
                         addr = signed16(fetch16());
-                        if (!(CC&F_NEGATIVE)) PC += addr;
+                        if (!(CC&F_NEGATIVE)) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x2B: //BMI
                         addr = signed16(fetch16());
-                        if (CC&F_NEGATIVE) PC += addr;
+                        if (CC&F_NEGATIVE) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x2C: //BGE
                         addr = signed16(fetch16());
-                        if (!((CC&F_NEGATIVE) ^ ((CC&F_OVERFLOW)<<2))) PC += addr;
+                        if (!((CC&F_NEGATIVE) ^ ((CC&F_OVERFLOW)<<2))) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x2D: //BLT
                         addr = signed16(fetch16());
-                        if ((CC&F_NEGATIVE) ^ ((CC&F_OVERFLOW)<<2)) PC += addr;
+                        if ((CC&F_NEGATIVE) ^ ((CC&F_OVERFLOW)<<2)) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x2E: //BGT
                         addr = signed16(fetch16());
-                        if (!((CC&F_NEGATIVE) ^ ((CC&F_OVERFLOW)<<2) || (CC&F_ZERO))) PC += addr;
+                        if (!((CC&F_NEGATIVE) ^ ((CC&F_OVERFLOW)<<2) || (CC&F_ZERO))) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x2F: //BLE
                         addr = signed16(fetch16());
-                        if ((CC&F_NEGATIVE) ^ ((CC&F_OVERFLOW)<<2) || (CC&F_ZERO)) PC += addr;
+                        if ((CC&F_NEGATIVE) ^ ((CC&F_OVERFLOW)<<2) || (CC&F_ZERO)) { PC += addr; T++; } // taken long branch takes 1 extra cycle
                     break;
                     case 0x3f: //SWI2
                         CC |= F_ENTIRE;
@@ -1675,7 +1677,7 @@ var step = function() {
                         PUSHB(rB);
                         PUSHB(rA);
                         PUSHB(CC);
-                        CC |= F_IRQMASK | F_FIRQMASK;
+                        // unlike SWI, SWI2 doesn't set I or F
                         PC = ReadWord(vecSWI2);
                     break;
                     case 0x83: //CMPD imm
@@ -1809,7 +1811,7 @@ var step = function() {
                         PUSHB(rB);
                         PUSHB(rA);
                         PUSHB(CC);
-                        CC |= F_IRQMASK | F_FIRQMASK;
+                        // unlike SWI, SWI3 doesn't set I or F
                         PC = ReadWord(vecSWI3);
                     break;
                     case 0x83: //CMPU imm
