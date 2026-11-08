@@ -1,6 +1,6 @@
 import { WASIFilesystem, WASIRunner } from "../../common/wasi/wasishim";
 import { defineArgs, extraArgsFor } from "../../common/toolmeta";
-import { BuildStep, BuildStepResult, gatherFiles, staleFiles, store, putWorkFile } from "../builder";
+import { BuildStep, BuildStepResult, gatherFiles, staleFiles, store, putWorkFile, fixParamsWithDefines } from "../builder";
 import { makeErrorMatcher } from "../listingutils";
 import { parseOscar64Dbj, parseOscar64Listing, parseOscar64Lbl, parseOscar64Map } from "./oscar64parse";
 import { loadWASIFilesystemZip } from "../wasiutils";
@@ -25,6 +25,8 @@ function getWasiFileAsString(wasi: WASIRunner, suffix: string): string | null {
 export async function compileOscar64(step: BuildStep): Promise<BuildStepResult> {
     const errors = [];
     gatherFiles(step, { mainFilePath: "main.c" });
+    // apply //#flag, //#symbol etc. from the source (e.g. `//#flag c -O2`)
+    fixParamsWithDefines(step.path, step.params);
     const destpath = "./" + (step.path || "main.c").replace(/\.[^.]+$/, ".prg");
     if (staleFiles(step, [destpath])) {
         if (!oscar64_fs) {
@@ -41,11 +43,14 @@ export async function compileOscar64(step: BuildStep): Promise<BuildStepResult> 
         }
         wasi.addPreopenDirectory("include");
         wasi.addPreopenDirectory(".");
-        // build with source-level debug info and no optimization, so inlined
-        // helpers (e.g. neslib's pal_col/vram_adr) keep their call-site line
-        // info and the editor can show hex offsets for every line. User build
-        // args are appended after this, so -O1/-O2 still override it.
-        let args = ["oscar64", "-O1", "-Oz", "-Op", "-Ox", "-g", "-ii=include", "-o=" + destpath];
+        // build with source-level debug info and -O0, so locals stay in the
+        // debug info (.dbj) and inlined helpers (e.g. neslib's
+        // pal_col/vram_adr) keep their call-site line info. -O1 and up drop
+        // locals (-Os -O2 -O3 even more). -Oz (zero-page globals), -Op
+        // (constant parameters) and -Oo (outliner) shrink the code without
+        // losing any. A project can opt in to more with `//#flag c -O2`
+        // (appended after these, so it overrides).
+        let args = ["oscar64", "-O0", "-Oz", "-Op", "-Oo", "-g", "-ii=include", "-o=" + destpath];
         args.push.apply(args, defineArgs('oscar64', step.params && step.params.define));
         args.push.apply(args, defineArgs('oscar64', step.params && step.params.symbols && step.params.symbols.compiler));
         args.push.apply(args, extraArgsFor('oscar64', step.params && step.params.buildArgs));

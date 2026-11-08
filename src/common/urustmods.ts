@@ -26,6 +26,7 @@ export const URUST_RS8_MODULES: string[] = [
   "io",
   "joy",
   "key",
+  "lz",
   "math",
   "mem",
   "msx",

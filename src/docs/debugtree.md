@@ -37,9 +37,10 @@ oscar64 reports a local's visibility as the source lines where it is in
 scope, not as code addresses, so its parser maps those lines through the
 function's line table. Locals on the call stack or in a frame are read
 through oscar64's zero-page stack or frame pointer at each stop. Its
-default `-O1` build folds most locals into registers or temporaries, and
-those cannot be shown; add `//#flag c -O0` to a program that you want to
-inspect in the debugger.
+IDE builds with `-O0` (plus the size-only `-Oz -Op -Oo`) so locals stay
+visible; `-O1` and up fold most of them into registers or temporaries, and
+those cannot be shown. A program can trade that for speed with
+`//#flag c -O2`.
 
 urust also lists the source-declared globals (`static`, `const`, `reg!`) in
 its debug output, with their type and home address. They are always live, so

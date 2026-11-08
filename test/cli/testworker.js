@@ -433,6 +433,32 @@ describe('Worker', function() {
     assert.equal(msg.qid, 129);
   });
 
+  it('should build oscar64 with -O0 (locals kept) and honor //#flag c', async function() {
+    var body = 'char sum(char n) { char t = 0; for (char i = 0; i < n; i++) t += i; return t; }\n' +
+      'int main() { return sum(5); }\n';
+    async function build(code) {
+      return await new Promise(function(resolve, reject) {
+        global.postMessage = function(msg) {
+          if (!msg.unchanged) {
+            assert.ok(!msg.errors || msg.errors.length === 0, JSON.stringify(msg.errors));
+            resolve(msg);
+          }
+        };
+        (async function() {
+          await global.onmessage({data:{reset:true}});
+          await global.onmessage({data:{code:code, platform:'c64', tool:'oscar64', path:'main.c', mainfile:true}});
+        })().catch(reject);
+      });
+    }
+    var names = (r) => (r.debuginfo.sourceVariables || []).map(v => v.function + '.' + v.name);
+    var base = await build(body);
+    assert.ok(names(base).includes('sum.t'), 'local t missing from debug info: ' + names(base));
+    assert.ok(names(base).includes('sum.i'), 'local i missing from debug info: ' + names(base));
+    // a source-level flag is appended after ours, so -O2 overrides -O0
+    var opt = await build('//#flag c -O2\n' + body);
+    assert.notStrictEqual(opt.output.length, base.output.length, '//#flag c -O2 had no effect');
+  });
+
   it('should compile oscar64 for atari8 into an XEX image', async function() {
     var msgs = [{code:'#include <stdio.h>\n#include <conio.h>\nint main() { clrscr(); printf("FOO"); return 0; }', platform:'atari8-800', tool:'oscar64', path:'main.c', mainfile:true}];
     var result = await new Promise(function(resolve, reject) {

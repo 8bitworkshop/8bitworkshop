@@ -63,7 +63,8 @@ describe('Oscar64 debug info', function () {
     // the whole function, including branch tails with no line entry
     assert.deepStrictEqual(byName('arr').ranges, [[0x8000, 0x8020]]);
     assert.deepStrictEqual(byName('i').ranges, [[0x8004, 0x8008], [0x8010, 0x8018]]);
-    assert.strictEqual(byName('n').ranges, null);
+    // a parameter has no enter/leave: it is live in its own function only
+    assert.deepStrictEqual(byName('n').ranges, [[0x8000, 0x8020]]);
   });
 
   it('shows only the variables live at the PC', function () {

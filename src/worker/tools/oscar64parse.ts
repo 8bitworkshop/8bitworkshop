@@ -293,7 +293,11 @@ export function parseOscar64Dbj(dbjout: string): { sourceVariables: SourceVariab
             const ref = v.references && v.references[0];
             const file = ref && ref.source ? oscar64Basename(ref.source) :
                 fn.source ? oscar64Basename(fn.source) : null;
-            const ranges = oscar64VariableRanges(fn, v, ref && ref.source);
+            // Parameters (and anything else without enter/leave) live in
+            // fixed cells that other functions reuse, so they are only
+            // meaningful inside their own function.
+            const ranges = oscar64VariableRanges(fn, v, ref && ref.source) ||
+                [[fn.start, fn.end] as [number, number]];
             sourceVariables.push({
                 name: v.name,
                 type: oscar64TypeName(type, types),
