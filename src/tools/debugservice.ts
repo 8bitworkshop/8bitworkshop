@@ -19,6 +19,7 @@ import { hex } from '../common/util';
 import type { CodeListingMap } from '../common/workertypes';
 import type { EmuTarget } from './emutarget';
 import { cpuRegisters, RUN_SCRIPT_HELP, RunScript } from './runscript';
+import { symbolizeOperand } from '../common/sourcevars';
 
 export type StepKind = 'in' | 'over' | 'out';
 
@@ -293,7 +294,7 @@ export class DebugService {
       const n = d ? d.nbytes : 1;
       let bytes = '';
       for (let b = 0; b < n; b++) bytes += hex(this.target.read((a + b) & 0xffff), 2) + ' ';
-      const line: DisasmResult = { addr: a & 0xffff, bytes: bytes.trim(), text: d ? d.line : '???' };
+      const line: DisasmResult = { addr: a & 0xffff, bytes: bytes.trim(), text: d ? (d.isaddr ? symbolizeOperand(d.line, a & 0xffff, this.target.platform.debugSymbols) : d.line) : '???' };
       const sym = this.debug.symbolAt(a & 0xffff);
       if (sym && sym.offset === 0) line.symbol = sym.name;
       const src = this.debug.sourceAt(a & 0xffff);

@@ -2,7 +2,7 @@ import assert from "assert";
 import { describe, it } from "mocha";
 import {
   GlobalVariable, SourceVariable, formatSourceValue, formatSourceVariableLine, functionAtPC,
-  globalVariablesOf, globalVariableTree, inlineSourceValues, liveSourceVariables, sourceVariableTree, sourceVariablesOf,
+  globalVariablesOf, globalVariableTree, inlineSourceValues, liveSourceVariables, localSymbolAt, symbolizeOperand, sourceVariableTree, sourceVariablesOf,
   writableGlobalVariablesOf
 } from "../../src/common/sourcevars";
 
@@ -34,6 +34,32 @@ describe('Source variables', function () {
     { name: 'SCORE', type: 'u16', size: 2, addr: 0x30, ram: true, mutable: true, file: 'main.rs', line: 12, col: 1 },
     { name: 'PALETTE', type: '[u8; 3]', size: 3, addr: 0x40, ram: false, mutable: false, file: 'main.rs', line: 16, col: 1, expandable: true },
   ];
+
+  it('names a local operand in the frame of the instruction', function () {
+    // score is at $10 in the first half of main and $20 in the second
+    assert.strictEqual(localSymbolAt(vars, 0x8004, 0x10, symbolmap, symbolsizes), 'score');
+    assert.strictEqual(localSymbolAt(vars, 0x8004, 0x11, symbolmap, symbolsizes), 'score+1');
+    assert.strictEqual(localSymbolAt(vars, 0x8014, 0x10, symbolmap, symbolsizes), null);
+    assert.strictEqual(localSymbolAt(vars, 0x8014, 0x21, symbolmap, symbolsizes), 'score+1');
+    // helper's `other` is at $10 too, but only inside helper
+    assert.strictEqual(localSymbolAt(vars, 0x8104, 0x10, symbolmap, symbolsizes), 'other');
+    // frame-relative variables have no fixed address
+    const rel: SourceVariable[] = [{ name: 'p', type: 'u8', size: 1, function: 'main', addr: 2, baseAddr: 0x80, range: [0x8000, 0x8020] }];
+    assert.strictEqual(localSymbolAt(rel, 0x8000, 2, symbolmap, symbolsizes), null);
+  });
+
+  it('rewrites an operand as a local, then a global, then a global+1', function () {
+    const syms = { addr2symbol: { 0x10: 'GLOBAL', 0x30: 'SCORE' } as { [a: number]: string },
+      symbolmap, symbolsizes, debuginfo: { sourceVariables: vars } };
+    // the local beats the global at the same cell, but only where it is live
+    assert.strictEqual(symbolizeOperand('LDA $11', 0x8004, syms), 'LDA score+1');
+    assert.strictEqual(symbolizeOperand('LDA $10', 0x8104, syms), 'LDA other');
+    assert.strictEqual(symbolizeOperand('LDA $10', 0x9000, syms), 'LDA GLOBAL');
+    assert.strictEqual(symbolizeOperand('LDA $31', 0x9000, syms), 'LDA SCORE+1');
+    assert.strictEqual(symbolizeOperand('LDA #$10', 0x8004, syms), 'LDA #$10');
+    assert.strictEqual(symbolizeOperand('LDA $99', 0x8004, syms), 'LDA $99');
+    assert.strictEqual(symbolizeOperand('LDA $10', 0x8004, null), 'LDA $10');
+  });
 
   it('reads the variables out of debuginfo', function () {
     assert.deepStrictEqual(sourceVariablesOf({ sourceVariables: vars }), vars);

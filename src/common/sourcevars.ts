@@ -149,6 +149,60 @@ export function liveSourceVariables(vars: SourceVariable[], pc: number,
 }
 
 /**
+ * The name of the local variable that lives at `operand`, for an instruction
+ * at `instrAddr` (`name`, or `name+1` inside a multi-byte variable). Locals
+ * are resolved in the frame of the instruction, not of the PC: a cell is
+ * overlaid over time, so only a variable live at `instrAddr` may name it.
+ * Frame-relative variables (`baseAddr`) have no fixed address and are skipped.
+ */
+export function localSymbolAt(vars: SourceVariable[], instrAddr: number, operand: number,
+  symbolmap: { [name: string]: number }, symbolsizes?: { [name: string]: number }): string | null {
+  const live = liveSourceVariables(vars.filter(v => v.addr != null && v.baseAddr == null),
+    instrAddr, symbolmap, symbolsizes);
+  for (const v of live) {
+    const ofs = operand - (v.addr as number);
+    if (ofs >= 0 && ofs < Math.max(1, v.size || 1)) {
+      // inlined callees' variables are named `mangled_callee::name`
+      const name = v.name.includes('::') ? v.name.slice(v.name.lastIndexOf('::') + 2) : v.name;
+      return ofs ? `${name}+${ofs}` : name;
+    }
+  }
+  return null;
+}
+
+/** The parts of `DebugSymbols` that symbol lookup in a disassembly needs. */
+export interface OperandSymbols {
+  addr2symbol?: { [addr: number]: string };
+  symbolmap?: { [name: string]: number };
+  symbolsizes?: { [name: string]: number };
+  debuginfo?: any;
+}
+
+/**
+ * Rewrite the `$ADDR` operand of a disassembled instruction at `instrAddr`
+ * as a symbol: a local live at the instruction first (see `localSymbolAt`),
+ * then a global, then a global one byte back (`name+1`). The text is returned
+ * unchanged when nothing names it. Shared by the IDE's disassembly view, the
+ * `8bws` run script and the debug service, so they all label operands alike.
+ */
+export function symbolizeOperand(text: string, instrAddr: number, syms: OperandSymbols | null | undefined): string {
+  if (!syms) return text;
+  const addr2symbol = syms.addr2symbol || {};
+  const locals = sourceVariablesOf(syms.debuginfo);
+  return text.replace(/([^#])[$]([0-9A-F]+)/, (substr: string, pre: string, digits: string): string => {
+    const addr = parseInt(digits, 16);
+    // a local of the function containing this instruction wins over a global at the same cell
+    const local = locals.length ? localSymbolAt(locals, instrAddr, addr, syms.symbolmap || {}, syms.symbolsizes) : null;
+    if (local) return pre + local;
+    const sym = addr2symbol[addr];
+    if (sym) return pre + sym;
+    const prev = addr2symbol[addr - 1];
+    if (prev) return pre + prev + "+1";
+    return substr;
+  });
+}
+
+/**
  * The address a variable's value is at right now. A stack- or frame-relative
  * variable (`baseAddr` set) moves as the program calls functions, so the
  * pointer has to be read at every stop instead of being baked into the var.

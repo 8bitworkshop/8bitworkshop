@@ -36,6 +36,7 @@ import { breakpointMarkers, bytes, clock, currentPcMarker, errorMarkers, ErrorIn
 import { currentPc, errorMessages, errorSpans, highlightLines, showValue, tracedLines } from "./visuals";
 import { computeHeatLevels } from "./traceheat";
 import { buildSourceLineMap, formatSourceComment, isSourceComment, SourceLineReader } from "./disasmsource";
+import { symbolizeOperand } from "../../common/sourcevars";
 
 // look ahead this many bytes when finding source lines for a PC
 export const PC_LINE_LOOKAHEAD = 64;
@@ -911,6 +912,7 @@ export class DisassemblerView implements ProjectView {
     let selline = 0;
     let lastSource = '';
     let addr2symbol = (platform.debugSymbols && platform.debugSymbols.addr2symbol) || {};
+    const dbg = platform.debugSymbols;
     const sourcelines = current_project
       ? buildSourceLineMap(current_project.getListings(), makeSourceLineReader(), path => !isAssemblerSource(path))
       : null;
@@ -940,16 +942,7 @@ export class DisassemblerView implements ProjectView {
         while (bytes.length < 14)
           bytes += ' ';
         let dstr = disasm.line;
-        if (addr2symbol && disasm.isaddr) { // TODO: move out
-          dstr = dstr.replace(/([^#])[$]([0-9A-F]+)/, (substr: string, ...args: any[]): string => {
-            let addr = parseInt(args[1], 16);
-            let sym = addr2symbol[addr];
-            if (sym) return (args[0] + sym);
-            sym = addr2symbol[addr - 1];
-            if (sym) return (args[0] + sym + "+1");
-            return substr;
-          });
-        }
+        if (disasm.isaddr) dstr = symbolizeOperand(dstr, a, dbg);
         if (addr2symbol) {
           let sym = addr2symbol[a];
           if (sym) {

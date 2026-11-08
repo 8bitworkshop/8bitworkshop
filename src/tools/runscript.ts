@@ -9,6 +9,7 @@
 import { KeyFlags } from '../common/emu';
 import type { InsnKind } from '../common/callgraph';
 import { CallProfiler } from '../common/callprofile';
+import { symbolizeOperand } from '../common/sourcevars';
 import { ProbeFlags, ProbeRecorder } from '../common/probe';
 import { hex } from '../common/util';
 import { treeChildren } from '../common/debugtree';
@@ -260,7 +261,8 @@ export class RunScript {
     let bytes = '';
     if (d) for (let b = 0; b < d.nbytes; b++) bytes += hex(this.target.read(addr + b)) + ' ';
     const label = this.addr2symbol[addr] ? `${this.addr2symbol[addr]}:\n` : '';
-    let line = `${label}  $${hex(addr, 4)}  ${bytes.padEnd(12)} ${(d ? d.line : '???').padEnd(20)}`;
+    const text = d ? (d.isaddr ? symbolizeOperand(d.line, addr, this.target.platform.debugSymbols) : d.line) : '???';
+    let line = `${label}  $${hex(addr, 4)}  ${bytes.padEnd(12)} ${text.padEnd(20)}`;
     if (withRegs) line += ' ' + formatRegs(this.target.getCPUState());
     return line.replace(/\s+$/, '');
   }

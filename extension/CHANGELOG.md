@@ -7,6 +7,7 @@
 - `.rs` is treated as a shared extension: 8bitworkshop never claims it, never shows "No platform" for an unrelated Rust file, and leaves the `rust` language to your Rust extension. Without one, a built-in `Rust (urust)` grammar highlights the file inside a project.
 - New urust projects write `.vscode/settings.json` that turns off rust-analyzer's `cargo check` (urust has no Cargo target), its unresolved-name diagnostics (`rs8::*`, `reg!` and `#[reset]` can't resolve without a Cargo target; syntax and type errors stay), its Run/Debug lenses, and proc-macro expansion (the rs8 macros are markers; expanding `#[asm]`/`#[no_cross]` makes the proc-macro server exit with status 101), while keeping highlighting, hover and navigation. **8bitworkshop: Set Up rust-analyzer** does the same for an existing project, and setting a urust main file or accepting a detected project writes them automatically.
 - Blank programs built with urust are labelled **Rust** rather than the tool's name.
+- The disassembly view names urust local variables in operands (`LDA score+1`), resolved in the frame of each instruction's function.
 
 ## 0.1.2
 
