@@ -155,14 +155,39 @@ class RasterVideoImpl {
     ctx.fillRect(dx, dy, w, h);
   }
 
+  // When the pointer leaves the screen, release the paddles: after a short
+  // delay, recenter them and let go of the buttons. Otherwise the game keeps
+  // steering toward wherever the pointer stopped, and a button pressed before
+  // the pointer left can stay stuck down (mouseup happens outside the canvas).
+  paddleResetTimer: ReturnType<typeof setTimeout> = null;
+
   setupMouseEvents(el?: HTMLCanvasElement) {
     if (!el) el = this.canvas;
+    var cancelPaddleReset = () => {
+      if (this.paddleResetTimer != null) {
+        clearTimeout(this.paddleResetTimer);
+        this.paddleResetTimer = null;
+      }
+    };
+    var releasePaddles = () => {
+      this.paddleResetTimer = null;
+      this.paddle_x = 128;
+      this.paddle_y = 128;
+      this.paddle_buttons.fill(false);
+    };
     $(el).mousemove((e) => {
+      cancelPaddleReset();
       var pos = getMousePos(el, e);
       var new_x = Math.round(pos.x * 255 / this.canvas.width);
       var new_y = Math.round(pos.y * 255 / this.canvas.height);
       this.paddle_x = clamp(0, 255, new_x);
       this.paddle_y = clamp(0, 255, new_y);
+    }).mouseenter(() => {
+      // re-entering without moving shouldn't let the pending reset fire
+      cancelPaddleReset();
+    }).mouseleave(() => {
+      cancelPaddleReset();
+      this.paddleResetTimer = setTimeout(releasePaddles, 1000);
     }).mousedown((e) => {
       // TODO Allows users to specify mapping in settings.
       this.paddle_buttons[0] = !e.shiftKey && !e.altKey;
