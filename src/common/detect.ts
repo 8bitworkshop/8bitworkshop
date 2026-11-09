@@ -102,6 +102,7 @@ const FINGERPRINTS: { re: RegExp, platforms: string[], reason: string }[] = [
   { re: /\brs8::atari8\b/, platforms: ['atari8-800', 'atari8-5200'], reason: 'uses the rs8 Atari 8-bit library' },
   { re: /\brs8::apple2\b/, platforms: ['apple2'], reason: 'uses the rs8 Apple II library' },
   { re: /\brs8::vic20\b/, platforms: ['vic20'], reason: 'uses the rs8 VIC-20 library' },
+  { re: /\brs8::coco\b/, platforms: ['coco'], reason: 'uses the rs8 Color Computer library' },
   { re: /\brs8::zx\b/, platforms: ['zx'], reason: 'uses the rs8 ZX Spectrum library' },
 ];
 

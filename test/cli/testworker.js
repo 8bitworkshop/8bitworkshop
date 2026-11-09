@@ -403,6 +403,15 @@ describe('Worker', function() {
     assert.ok(result.segments.some(function(g) { return g.type === 'ram'; }));
   });
 
+  it('should compile urust for the Color Computer (6809)', async function() {
+    if (!haveUrust) return this.skip();
+    var code = 'use rs8::coco::*;\n\nstatic mut OUT: u8 = 0;\n\nfn main() {\n    unsafe { OUT = 42; }\n}\n';
+    var result = await buildOne({code:code, platform:'coco', tool:'urust', path:'main.rs', mainfile:true});
+    assert.ok(!result.errors || result.errors.length === 0, JSON.stringify(result.errors));
+    assert.ok(result.output instanceof Uint8Array && result.output.length > 0);
+    assert.ok(result.symbolmap['main'] >= 0xc000, 'cartridge code should be at $C000 and up');
+  });
+
   it('should report urust errors with line and column', async function() {
     if (!haveUrust) return this.skip();
     var code = 'use rs8::reset;\n#[reset]\nfn main() {\n    let x: u8 = "hi";\n}\n';

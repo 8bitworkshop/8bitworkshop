@@ -855,7 +855,8 @@ export function cpuStateToLongString_6809(c) {
 
 export abstract class Base6809Platform extends BaseZ80Platform {
 
-  // The 6809's stack layout is not the Z80's; urust does not target it.
+  // urust reaches its trap stub with `lbra __trap` (not a call), so no return
+  // address on the stack names the site; the spin address is all there is.
   getTrapSite() { return null; }
 
   newCPU(membus: MemoryBus) {

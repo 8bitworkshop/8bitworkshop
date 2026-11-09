@@ -135,6 +135,9 @@ describe('urust tool', function () {
     assert.strictEqual(urustPlatformName('msx'), 'msx');
     assert.strictEqual(urustPlatformName('gb'), 'gb');
     assert.strictEqual(urustPlatformName('atari7800'), 'atari7800');
+    // the 6809 backend has the Color Computer so far (not Vectrex or Williams)
+    assert.strictEqual(urustPlatformName('coco'), 'coco');
+    assert.strictEqual(urustPlatformName('vectrex'), undefined);
     // .rs selects urust on every Z80 platform, but not every one is a target
     assert.strictEqual(urustPlatformName('cpc'), undefined);
     assert.strictEqual(urustPlatformName('verilog'), undefined);

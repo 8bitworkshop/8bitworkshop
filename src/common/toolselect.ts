@@ -67,6 +67,7 @@ export function getToolForFilename_6809(fn: string): string {
   if (fn.endsWith(".h")) return "cmoc";
   if (fn.endsWith(".xasm")) return "xasm6809";
   if (fn.endsWith(".lwasm")) return "lwasm";
+  if (fn.endsWith(".rs")) return "urust";
   return "cmoc";
 }
 

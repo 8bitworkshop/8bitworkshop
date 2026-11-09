@@ -882,7 +882,7 @@ export const TOOL_META: { [id: string]: ToolMeta } = {
   },
 
   // Rust subset for 8-bit CPUs (github.com/sehugg/urust); one WASI binary
-  // builds for devel-6502, nes, c64, atari8, vcs, apple2, vic20 and
+  // builds for devel-6502, nes, c64, atari8, vcs, apple2, vic20, coco and
   // zx-spectrum (see URUST_PLATFORM_NAMES below)
   urust: {
     id: 'urust', name: 'urust', kind: 'compiler', arch: '6502',
@@ -1081,7 +1081,7 @@ export const URUST_PLATFORM_NAMES: { [root: string]: string } = {
 
 /** Platform roots urust targets under their own name. */
 const URUST_PASSTHROUGH_ROOTS = new Set([
-  'nes', 'c64', 'atari8', 'vcs', 'apple2', 'vic20', 'atari7800', 'msx', 'gb',
+  'nes', 'c64', 'atari8', 'vcs', 'apple2', 'vic20', 'atari7800', 'msx', 'gb', 'coco',
 ]);
 
 /** urust's `--platform` name for an 8bitworkshop platform id, if it has one. */
