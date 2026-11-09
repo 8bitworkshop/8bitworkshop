@@ -69,6 +69,39 @@ describe('Call graph', function () {
     assert.strictEqual(b.stack.length, 1);
   });
 
+  it('wraps the root once, however many returns leave it', function () {
+    // Returns at the root again and again (calls the trace window missed),
+    // always from the same RTS: one new root, not a level per return.
+    const b = run({ 0x205: 'return', 0x102: 'call', 0x300: 'return' }, [
+      [0x204, 0xf000], [0x205, 0xf000],   // return past the start: new root
+      [0x103, 0xf002], [0x204, 0xf002], [0x205, 0xf002],  // and again
+      [0x103, 0xf004], [0x102, 0xf004],   // a real call from the new root
+      [0x300, 0xf002], [0x300, 0xf002], [0x103, 0xf004],
+    ]);
+    assert.deepStrictEqual(Object.keys(b.graph.calls).sort(), ['$205', '$300']);
+    assert.deepStrictEqual(Object.keys(b.graph.calls['$205'].calls), []);
+    assert.strictEqual(b.stack.length, 1);
+  });
+
+  it('enters a call that an interrupt cut off, so the callee does not pop its caller', function () {
+    // A call at 0x102 and an IRQ before the callee's first instruction:
+    // SP drops 2 for the return address and 12 for the IRQ frame. The handler
+    // (0x9000) ends in RTI and the PC is then the callee, 0x200, which RETs.
+    const b = run({ 0x102: 'call', 0x9002: 'return', 0x201: 'return' }, [
+      [0x100, 0xf100], [0x101, 0xf100],
+      [0x101, 0xf100],
+      [0x102, 0xf100],                     // CALL $200 ...
+      [0x9000, 0xf0f2], [0x9001, 0xf0f2], [0x9002, 0xf0f2],  // ... IRQ: handler
+      [0x200, 0xf0fe],                     // RTI: back at the callee
+      [0x201, 0xf0fe],                     // RET
+      [0x103, 0xf100],
+    ]);
+    assert.deepStrictEqual(Object.keys(b.graph.calls).sort(), ['$200', '$9000']);
+    assert.strictEqual(b.graph.calls['$200'].count, 1);
+    assert.strictEqual(b.stack.length, 1);
+    assert.strictEqual(b.graph.$$PC, null);  // nothing was popped from, or wrapped around, the root
+  });
+
   it('guesses from SP and PC when it cannot tell the instruction', function () {
     const kinds = new Proxy({}, { get: () => 'unknown' }) as any;
     const b = run(kinds, [[0x100, 0x1ff], [0x101, 0x1ff], [0x200, 0x1fd]]);

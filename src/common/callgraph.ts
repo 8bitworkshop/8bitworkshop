@@ -8,7 +8,10 @@
 // alone, `total` to it and everything above it on the stack. A call or
 // return instruction's own clocks count in the routine it started in.
 //
-// An interrupt is a call too, whether or not the machine reports it.
+// An interrupt is a call too, whether or not the machine reports it. One that
+// lands right after a call instruction swallows that call: the next instruction
+// run is the handler's, and the callee's first runs only after the handler
+// returns. The call is entered then (see callLost).
 //
 // Where the instruction can't be told (no disassembler), it falls back to
 // guessing from how far SP moved and how far the PC jumped.
@@ -39,6 +42,14 @@ export class CallGraphBuilder {
   /** SP as the last instruction started */
   private spAtLastExec = -1;
   private interrupted = false;
+  /**
+   * Stack depths of handlers that interrupted a call instruction before the
+   * callee ran: when one returns, the PC is the callee's entry, so the call
+   * is entered there. (Else the callee's RTS would pop its caller's frame.)
+   */
+  private callLost = new Set<number>();
+  /** the root stands for callers we never saw call (see leave) */
+  private rootIsCaller = false;
   // for the fallback guess
   private jsr = false;
   private rts = false;
@@ -52,12 +63,14 @@ export class CallGraphBuilder {
   /** Forget everything. */
   clear() {
     this.graph = null;
+    this.rootIsCaller = false;
     this.reset();
   }
 
   /** Forget where it is, but keep the graph. */
   reset() {
     this.stack = [];
+    this.callLost.clear();
     this.lastsp = -1;
     this.lastpc = 0;
     this.spAtLastExec = -1;
@@ -70,29 +83,40 @@ export class CallGraphBuilder {
     return { $$SP: sp, $$PC: pc, count: 0, self: 0, total: 0, startLine: null, endLine: null, calls: {} };
   }
 
-  private enter(pc: number, row: number) {
+  private enter(pc: number, row: number, lostCall = false) {
     const top = this.stack[this.stack.length - 1];
     const sym = this.name(pc);
     let child = top.calls[sym];
     if (child == null) child = top.calls[sym] = this.newNode(pc, this.lastsp);
     else if (child.$$PC == null) child.$$PC = pc;
     this.stack.push(child);
+    if (lostCall) this.callLost.add(this.stack.length - 1);
     child.count++;
     child.startLine = row;
   }
 
-  private leave(row: number) {
+  /** Returns true if the routine left had interrupted a call (see callLost). */
+  private leave(row: number): boolean {
     if (this.stack.length > 1) {
+      const lost = this.callLost.delete(this.stack.length - 1);
       this.stack.pop().endLine = row;
-    } else {
+      return lost;
+    } else if (!this.rootIsCaller) {
       // it returned from where it was when we started: into a caller we
       // didn't see call, which becomes the new root
+      this.rootIsCaller = true;
+      this.callLost.clear();
       const old = this.stack[0];
       this.graph = this.newNode(null, this.lastsp);
       this.graph.total = old.total;
       this.graph.calls[this.name(this.lastpc)] = old;
       this.stack = [this.graph];
     }
+    // else the root already stands for the unseen callers. A later return
+    // from it is another one of them (or a call we never saw): wrapping the
+    // tree once more would only stack a level per return, each named for the
+    // same RTS and nested over the real routines, so leave the root be.
+    return false;
   }
 
   /** Charge `n` clocks to the routine running now. */
@@ -136,8 +160,15 @@ export class CallGraphBuilder {
           // A push that ends in a jump can only be an interrupt or BRK, since
           // a PUSH falls through. Many machines don't log their interrupts.
           const implicitIrq = kind === 'other' && pushed && Math.abs(addr - this.lastpc) >= 4;
-          if ((kind === 'call' || this.interrupted || implicitIrq) && pushed) this.enter(addr, row);
-          else if (kind === 'return' && popped) this.leave(row);
+          if ((kind === 'call' || this.interrupted || implicitIrq) && pushed) {
+            // a call instruction pushes one return address; more than that
+            // (or a reported interrupt) means an interrupt took the next slot
+            const lost = kind === 'call' && (this.interrupted || this.spAtLastExec - this.lastsp > 3);
+            this.enter(addr, row, lost);
+          } else if (kind === 'return' && popped) {
+            // the handler is done and the PC is the callee the interrupt cut off
+            if (this.leave(row)) this.enter(addr, row);
+          }
           this.jsr = this.rts = false;
         }
         this.interrupted = false;
