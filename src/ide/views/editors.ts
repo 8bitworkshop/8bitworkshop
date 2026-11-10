@@ -822,13 +822,48 @@ function highlightDisasmSourceLines() {
   });
 }
 
+// Source text for listing files that are not in the project, fetched from the
+// tool or platform filesystem (urust's embedded rs8 modules) as the view asks
+// for it. The lookup is async, so the reader returns null until the text
+// arrives and calls onSourceLoaded to let the view ask again.
+const sharedSourceText = new Map<string, string>();
+const sharedSourceLookups = new Map<string, Promise<string | null>>();
+
+// urust names its embedded modules `rs8/<module>.rs`, but the tool filesystem
+// has them under its include dir as `<module>.rs` (HeaderView strips the same
+// prefix); look them up the way it does.
+function sharedSourceKey(path: string): string {
+  return path.startsWith('rs8/') ? path.substring('rs8/'.length) : path;
+}
+
+// Include the project's tool/platform so a cached source from another project
+// (e.g. a different toolchain's io.rs) cannot be used.
+function sharedSourceLookupKey(path: string): string {
+  return [current_project.platform_id, current_project.getToolForFilename(current_project.mainPath), sharedSourceKey(path)].join(':');
+}
+
+function lookupSharedSourceText(path: string): Promise<string | null> {
+  const key = sharedSourceLookupKey(path);
+  let lookup = sharedSourceLookups.get(key);
+  if (!lookup) {
+    lookup = lookupSharedFileText(sharedSourceKey(path)).then(text => {
+      if (text != null) sharedSourceText.set(key, text);
+      return text;
+    }).catch(() => null);
+    sharedSourceLookups.set(key, lookup);
+  }
+  return lookup;
+}
+
 // Read source lines for the disassembly view. Source paths from a listing are
 // relative to the build (e.g. "main.c"), so resolve them against the project
 // files first. Caches both path lookups and file contents: one disassembly
 // refresh asks for the same file many times.
-function makeSourceLineReader(): SourceLineReader {
+function makeSourceLineReader(onSourceLoaded?: () => void): SourceLineReader {
   const pathCache = new Map<string, string | null>();
   const textCache = new Map<string, string[] | null>();
+  const sharedTextCache = new Map<string, string[] | null>();
+  const requested = new Set<string>();
   const resolvePath = (path: string): string | null => {
     if (pathCache.has(path)) return pathCache.get(path);
     const candidates = [
@@ -843,9 +878,11 @@ function makeSourceLineReader(): SourceLineReader {
         break;
       }
     }
-    if (!found) {
+    if (!found && !path.startsWith('rs8/')) {
       // the compiler may name the file without its folder (e.g. "main.c");
-      // fall back to a project file with the same name
+      // fall back to a project file with the same name. Don't do this for
+      // urust's rs8 paths: a project file named apple2.rs is not the module
+      // the build compiled, and the bundled source is looked up below.
       const want = getFilenameForPath(path);
       current_project.iterateFiles((fn, data) => {
         if (found || typeof data !== 'string') return;
@@ -855,7 +892,7 @@ function makeSourceLineReader(): SourceLineReader {
     pathCache.set(path, found);
     return found;
   };
-  return (path: string, line: number): string | null => {
+  const projectLines = (path: string): string[] | null => {
     const resolved = resolvePath(path);
     if (!resolved) return null;
     let lines = textCache.get(resolved);
@@ -864,12 +901,45 @@ function makeSourceLineReader(): SourceLineReader {
       lines = typeof text === 'string' ? text.split(/\r?\n/) : null;
       textCache.set(resolved, lines);
     }
+    return lines;
+  };
+  const sharedLines = (path: string): string[] | null => {
+    const key = sharedSourceKey(path);
+    let lines = sharedTextCache.get(key);
+    if (lines !== undefined) return lines;
+    const lookupKey = sharedSourceLookupKey(path);
+    const text = sharedSourceText.get(lookupKey);
+    if (text == null) {
+      if (!requested.has(lookupKey)) {
+        requested.add(lookupKey);
+        lookupSharedSourceText(path).then(text => {
+          if (text != null && onSourceLoaded) onSourceLoaded();
+        });
+      }
+      return null;
+    }
+    lines = text.split(/\r?\n/);
+    sharedTextCache.set(key, lines);
+    return lines;
+  };
+  return (path: string, line: number): string | null => {
+    // an exact project file named rs8/... wins (the build may have used it);
+    // otherwise an rs8 path is the bundled module, not a mostly-matching
+    // project file with the same filename
+    let lines = typeof current_project.getFile(path) === 'string'
+      ? projectLines(path)
+      : path.startsWith('rs8/') ? sharedLines(path) : projectLines(path);
+    if (lines == null && !path.startsWith('rs8/')) lines = sharedLines(path);
     return lines && line >= 1 && line <= lines.length ? lines[line - 1] : null;
   };
 }
 
 export class DisassemblerView implements ProjectView {
   disasmview: EditorView;
+  // the address the window is centered on, so an async source-text lookup can
+  // redraw without jumping back to the PC
+  centerAddr = 0;
+  sourceRefreshQueued = false;
 
   getSelectionText(): string {
     return getEditorSelectionText(this.disasmview);
@@ -908,13 +978,15 @@ export class DisassemblerView implements ProjectView {
   refresh(moveCursor: boolean, centerAddr?: number) {
     let state = lastDebugState || platform.saveState(); // TODO?
     let pc = centerAddr !== undefined ? centerAddr : (state.c ? state.c.PC : 0);
+    this.centerAddr = pc;
     let curline = 0;
     let selline = 0;
     let lastSource = '';
     let addr2symbol = (platform.debugSymbols && platform.debugSymbols.addr2symbol) || {};
     const dbg = platform.debugSymbols;
     const sourcelines = current_project
-      ? buildSourceLineMap(current_project.getListings(), makeSourceLineReader(), path => !isAssemblerSource(path))
+      ? buildSourceLineMap(current_project.getListings(), makeSourceLineReader(() => this.sourceTextLoaded()),
+        path => !isAssemblerSource(path))
       : null;
     // TODO: not perfect disassembler
     let disassemble = (start, len) => {
@@ -969,6 +1041,17 @@ export class DisassemblerView implements ProjectView {
         effects: EditorView.scrollIntoView(line.from, { y: "center" }),
       });
     }
+  }
+
+  // A listing source outside the project (urust's rs8 modules) arrived from
+  // the worker; rebuild the interleaved source lines once, not per file.
+  private sourceTextLoaded() {
+    if (this.sourceRefreshQueued) return;
+    this.sourceRefreshQueued = true;
+    setTimeout(() => {
+      this.sourceRefreshQueued = false;
+      this.refresh(false, this.centerAddr);
+    }, 0);
   }
 
   // jump to an address (or symbol), via the Go To Address prompt
