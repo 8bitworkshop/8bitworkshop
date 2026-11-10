@@ -75,3 +75,18 @@ describe('6809 CPU flags and timing', () => {
     assert.strictEqual(run([0x10, 0x27, 0x00, 0x10], { CC: Z }).PC, 0x114);
   });
 });
+
+describe('6809 disassembler', () => {
+  const cpu: any = CPU6809();
+  it('long branches are 4 bytes and target pc + 4 + offset', () => {
+    // LBCC $C7CE, offset $021E -> $C9F0 (was reported as 5 bytes, target $C9EC)
+    assert.deepStrictEqual(cpu.disasm(0x10, 0x24, 0x02, 0x1e, 0xdc, 0xc7ce),
+      { line: "LBCC\t#$C9F0", nbytes: 4 });
+    assert.strictEqual(cpu.disasm(0x10, 0x26, 0x02, 0x38, 0x00, 0xc7de).line,
+      "LBNE\t#$CA1A");
+  });
+  it('short branches still target pc + 2 + offset', () => {
+    assert.deepStrictEqual(cpu.disasm(0x26, 0x02, 0, 0, 0, 0x1000),
+      { line: "BNE\t#$1004", nbytes: 2 });
+  });
+});

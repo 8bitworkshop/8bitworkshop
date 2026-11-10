@@ -2163,21 +2163,21 @@ var ds11 = {
 };
 
 var ds10 = {
-0x21:[5,3,"LBRN"],
-0x22:[5,3,"LBHI"],
-0x23:[5,3,"LBLS"],
-0x24:[5,3,"LBCC"],
-0x25:[5,3,"LBCS"],
-0x26:[5,3,"LBNE"],
-0x27:[5,3,"LBEQ"],
-0x28:[5,3,"LBVC"],
-0x29:[5,3,"LBVS"],
-0x2a:[5,3,"LBPL"],
-0x2b:[5,3,"LBMI"],
-0x2c:[5,3,"LBGE"],
-0x2d:[5,3,"LBLT"],
-0x2e:[5,3,"LBGT"],
-0x2f:[5,3,"LBLE"],
+0x21:[4,3,"LBRN"],
+0x22:[4,3,"LBHI"],
+0x23:[4,3,"LBLS"],
+0x24:[4,3,"LBCC"],
+0x25:[4,3,"LBCS"],
+0x26:[4,3,"LBNE"],
+0x27:[4,3,"LBEQ"],
+0x28:[4,3,"LBVC"],
+0x29:[4,3,"LBVS"],
+0x2a:[4,3,"LBPL"],
+0x2b:[4,3,"LBMI"],
+0x2c:[4,3,"LBGE"],
+0x2d:[4,3,"LBLT"],
+0x2e:[4,3,"LBGT"],
+0x2f:[4,3,"LBLE"],
 0x3F:[2,2,"SWI2"],
 0x83:[4,8,"CMPD"],
 0x8C:[4,8,"CMPY"],
@@ -2251,7 +2251,8 @@ var disasm = function(i,a,b,c,d,pc) {
         case 2: // inherent
             break;
         case 3: //brel16
-            mnemo+="\t#$"+toHex4((a*256+b)<32768 ? (a*256+b+pc):(a*256+b+pc-65536)); break;
+            var off16 = (a*256+b)<32768 ? (a*256+b) : (a*256+b-65536);
+            mnemo+="\t#$"+toHex4((off16+pc+bytes) & 0xffff); break;
         case 4: //imm8
             mnemo+="\t#$"+toHex2(a); break;
         case 5: //brel8
