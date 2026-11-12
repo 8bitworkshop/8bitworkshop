@@ -1,7 +1,7 @@
 import { defaultKeymap, deleteLine, history, historyKeymap, isolateHistory, redo, undo, toggleComment } from "@codemirror/commands";
 import { bracketMatching, foldGutter, indentOnInput, indentService, indentUnit } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap, openSearchPanel, findNext, selectNextOccurrence } from "@codemirror/search";
-import { Compartment, EditorState, Extension, StateEffect, StateField } from "@codemirror/state";
+import { Compartment, EditorState, Extension, StateEffect, StateField, Text } from "@codemirror/state";
 import { crosshairCursor, Decoration, DecorationSet, drawSelection, dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, KeyBinding, rectangularSelection, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { CodeAnalyzer } from "../../common/analysis";
 import { ProbeFlags, ProbeRecorder } from "../../common/probe";
@@ -938,7 +938,7 @@ export class DisassemblerView implements ProjectView {
   disasmview: EditorView;
   // the address the window is centered on, so an async source-text lookup can
   // redraw without jumping back to the PC
-  centerAddr = 0;
+  centerAddr = -1; // -1: never centered yet, so the first refresh always centers
   sourceRefreshQueued = false;
 
   getSelectionText(): string {
@@ -978,6 +978,8 @@ export class DisassemblerView implements ProjectView {
   refresh(moveCursor: boolean, centerAddr?: number) {
     let state = lastDebugState || platform.saveState(); // TODO?
     let pc = centerAddr !== undefined ? centerAddr : (state.c ? state.c.PC : 0);
+    // re-center if the PC moved (e.g. Reset), else a doc replace scrolls to top
+    if (pc !== this.centerAddr) moveCursor = true;
     this.centerAddr = pc;
     let curline = 0;
     let selline = 0;
@@ -1031,14 +1033,28 @@ export class DisassemblerView implements ProjectView {
     }
     var startpc = pc < 0 ? pc - disasmWindow : Math.max(0, pc - disasmWindow); // for 32-bit PCs w/ hi bit set
     let text = disassemble(startpc, pc - startpc) + disassemble(pc, disasmWindow);
+    // Replacing the whole doc collapses the scroll anchor to the top, so when
+    // we want the PC centered, do the replace + selection + scroll in ONE
+    // transaction (selection is in the new doc's coordinates).
+    const oldLen = this.disasmview.state.doc.length;
+    const newDoc = Text.of(text.split("\n"));
+    let lineFrom = -1;
+    if (moveCursor) lineFrom = newDoc.line(Math.min(selline + 1, newDoc.lines)).from;
     this.disasmview.dispatch({
-      changes: { from: 0, to: this.disasmview.state.doc.length, insert: text }
-    })
+      changes: { from: 0, to: oldLen, insert: text },
+      ...(moveCursor ? {
+        selection: { anchor: lineFrom, head: lineFrom },
+        effects: EditorView.scrollIntoView(lineFrom, { y: "center" }),
+      } : {}),
+    });
     if (moveCursor) {
-      const line = this.disasmview.state.doc.line(selline + 1);
-      this.disasmview.dispatch({
-        selection: { anchor: line.from, head: line.from },
-        effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+      // the pane may have just been un-hidden (display:none -> shown), in which
+      // case CodeMirror's viewport measurement is stale; re-center after layout
+      requestAnimationFrame(() => {
+        if (this.centerAddr !== pc) return; // superseded by a newer refresh
+        this.disasmview.dispatch({
+          effects: EditorView.scrollIntoView(this.disasmview.state.selection.main.head, { y: "center" }),
+        });
       });
     }
   }
@@ -1050,7 +1066,8 @@ export class DisassemblerView implements ProjectView {
     this.sourceRefreshQueued = true;
     setTimeout(() => {
       this.sourceRefreshQueued = false;
-      this.refresh(false, this.centerAddr);
+      // re-center: a plain refresh(false) would leave the view scrolled to the top
+      this.refresh(true, this.centerAddr);
     }, 0);
   }
 
