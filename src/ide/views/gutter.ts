@@ -267,17 +267,24 @@ const statusGutter = gutter({
         return otherMarkers.length === 0 ? BREAKPOINT_PLACEHOLDER_MARKER : null;
     },
     markers: v => {
-        const errorMarkers = v.state.field(errorField);
-        if (errorMarkers.size > 0) {
-            return errorMarkers;
-        }
-        return v.state.field(breakpointField);
+        const errors = v.state.field(errorField);
+        const breakpoints = v.state.field(breakpointField);
+        // Show both: a warning/error must not hide the breakpoints (or make
+        // them impossible to toggle), and toggling a breakpoint must not
+        // discard the build's warnings.
+        if (errors.size == 0) return breakpoints;
+        if (breakpoints.size == 0) return errors;
+        return RangeSet.join([errors, breakpoints]);
     },
     initialSpacer: () => new ErrorMarker(0, "ⓧ"), // "ⓧ" is wider than "●".
     domEventHandlers: {
-        click(view, line) {
+        click(view, line, event) {
+            const target = event.target as HTMLElement;
             const errorMarkers = view.state.field(errorField);
-            if (errorMarkers.size > 0) {
+            // Clicking the diagnostic icon shows its message; anywhere else in
+            // the status gutter toggles a breakpoint (even when this file has
+            // errors/warnings elsewhere).
+            if (target && target.closest && target.closest(".gutter-error, .gutter-warning")) {
                 const pos = line.from;
                 let msg = "";
                 let warning = false;

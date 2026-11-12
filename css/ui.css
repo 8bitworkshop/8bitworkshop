@@ -380,6 +380,10 @@ div.is-busy-unused {
 }
 #error_alert_msg {
   margin-right: 2em;
+  /* compiler messages are long and often contain unbroken paths/symbols */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 #error_alert_msg a {
   cursor: pointer;
@@ -390,6 +394,12 @@ div.is-busy-unused {
   padding: 0 2px;
   border-radius: 2px;
   font-family: monospace;
+}
+.cm-error-message {
+  /* keep newlines from the tool, but wrap long lines inside the editor */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .error-help {
   display: block;
