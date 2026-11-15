@@ -7,6 +7,7 @@
 
 export const URUST_RS8_MODULES: string[] = [
   "apple2",
+  "atari5200",
   "atari7800",
   "atari8",
   "bcd",
@@ -24,6 +25,7 @@ export const URUST_RS8_MODULES: string[] = [
   "gb",
   "gfx",
   "host",
+  "input",
   "io",
   "joy",
   "key",
@@ -46,20 +48,21 @@ export const URUST_RS8_MODULES: string[] = [
 ];
 
 export const URUST_RS8_CHILDREN: { [module: string]: string[] } = {
-  apple2: ["console", "tone", "util"],
+  apple2: ["console", "input", "tone", "util"],
+  atari5200: ["input"],
   atari7800: ["pokey"],
-  atari8: ["console", "gfx", "tone", "util"],
-  c64: ["console", "tone", "util"],
-  cbm: ["console", "regs"],
-  coco: ["console"],
-  coleco: ["util"],
+  atari8: ["console", "gfx", "input", "tone", "util"],
+  c64: ["console", "input", "tone", "util"],
+  cbm: ["console", "input", "regs"],
+  coco: ["console", "input", "util"],
+  coleco: ["input"],
   gb: ["tone", "util"],
   gfx: ["geom", "surface"],
-  host: ["console", "tone"],
-  msx: ["util"],
-  nes: ["console", "tone", "util"],
+  host: ["console", "input", "tone"],
+  msx: ["input"],
+  nes: ["console", "input", "tone", "util"],
   tms9918: ["console"],
   vcs: ["util"],
-  vic20: ["console", "tone", "util"],
-  zx: ["console", "tone", "util"],
+  vic20: ["console", "input", "tone", "util"],
+  zx: ["console", "input", "tone"],
 };

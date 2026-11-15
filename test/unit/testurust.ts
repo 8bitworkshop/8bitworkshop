@@ -96,12 +96,14 @@ describe('urust tool', function () {
     // and every module the pattern links has to be in the package too (a
     // module urust dropped must not linger in URUST_RS8_MODULES)
     for (const module of URUST_RS8_MODULES) {
-      assert.ok(zip.file(`rs8/${module}.rs`), `missing rs8/${module}.rs`);
+      assert.ok(zip.file(`rs8/${module}.rs`),
+        `missing rs8/${module}.rs; run \`npm run gen-urustmods\``);
     }
     // nested modules too: a link to rs8/nes/util.rs has to find the file
     for (const [module, children] of Object.entries(URUST_RS8_CHILDREN)) {
       for (const child of children) {
-        assert.ok(zip.file(`rs8/${module}/${child}.rs`), `missing rs8/${module}/${child}.rs`);
+        assert.ok(zip.file(`rs8/${module}/${child}.rs`),
+          `missing rs8/${module}/${child}.rs; run \`npm run gen-urustmods\``);
       }
     }
     // ... and every source the package ships has to be linkable (so a new
