@@ -8,6 +8,11 @@ import { getBasePlatform, getRootBasePlatform } from "./util";
 
 export type ToolSelector = (fn: string) => string;
 
+/** True for urust source: Rust (`.rs`) or its `.uasm` assembly front end. */
+export function isUrustSource(fn: string): boolean {
+  return fn.endsWith(".rs") || fn.endsWith(".uasm");
+}
+
 ////// per architecture
 
 export function getToolForFilename_6502(fn: string): string {
@@ -26,7 +31,7 @@ export function getToolForFilename_6502(fn: string): string {
   if (fn.endsWith(".cpp")) return "oscar64";
   if (fn.endsWith(".cc")) return "oscar64";
   if (fn.endsWith(".o64")) return "oscar64";
-  if (fn.endsWith(".rs")) return "urust";
+  if (isUrustSource(fn)) return "urust";
   return "dasm"; // .a
 }
 
@@ -39,7 +44,7 @@ export function getToolForFilename_z80(fn: string): string {
   if (fn.endsWith(".scc")) return "sccz80";
   if (fn.endsWith(".z")) return "zmac";
   if (fn.endsWith(".wiz")) return "wiz";
-  if (fn.endsWith(".rs")) return "urust";
+  if (isUrustSource(fn)) return "urust";
   return "zmac";
 }
 
@@ -67,7 +72,7 @@ export function getToolForFilename_6809(fn: string): string {
   if (fn.endsWith(".h")) return "cmoc";
   if (fn.endsWith(".xasm")) return "xasm6809";
   if (fn.endsWith(".lwasm")) return "lwasm";
-  if (fn.endsWith(".rs")) return "urust";
+  if (isUrustSource(fn)) return "urust";
   return "cmoc";
 }
 
@@ -92,7 +97,7 @@ export function getToolForFilename_vcs(fn: string): string {
   if (fn.endsWith(".c")) return "cc65";
   //if (fn.endsWith(".h")) return "cc65";
   if (fn.endsWith(".ecs")) return "ecs";
-  if (fn.endsWith(".rs")) return "urust";
+  if (isUrustSource(fn)) return "urust";
   return "dasm";
 }
 

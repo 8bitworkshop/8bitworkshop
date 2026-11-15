@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import JSZip from "jszip";
 import { describe, it } from "mocha";
-import { getIncludeDirs, getIncludePatterns, getSharedFileSystemName, matchDependencyPatterns, urustErrorDocURL, URUST_RS8_CHILDREN, URUST_RS8_MODULES } from "../../src/common/toolmeta";
+import { getEditorStyleForFilename, getIncludeDirs, getIncludePatterns, getSharedFileSystemName, getToolMeta, matchDependencyPatterns, urustErrorDocURL, URUST_RS8_CHILDREN, URUST_RS8_MODULES } from "../../src/common/toolmeta";
 import { getToolForPlatform } from "../../src/common/toolselect";
 import { toolRoot } from "../../src/tools/toolroot";
 import {
@@ -11,9 +11,20 @@ import {
 } from "../../src/worker/tools/urustparse";
 
 describe('urust tool', function () {
-  it('is selected by .rs on 6502 platforms', function () {
+  it('is selected by .rs and .uasm on every arch it targets', function () {
     assert.strictEqual(getToolForPlatform('devel-6502', 'main.rs'), 'urust');
     assert.strictEqual(getToolForPlatform('nes', 'game.rs'), 'urust');
+    assert.strictEqual(getToolForPlatform('nes', 'kernels.uasm'), 'urust');
+    assert.strictEqual(getToolForPlatform('zx', 'kernels.uasm'), 'urust');
+    assert.strictEqual(getToolForPlatform('coco', 'kernels.uasm'), 'urust');
+    assert.strictEqual(getToolForPlatform('vcs', 'kernels.uasm'), 'urust');
+  });
+
+  it('edits .uasm as assembly and .rs as Rust', function () {
+    const meta = getToolMeta('urust');
+    assert.deepStrictEqual(meta.extensions, ['.rs', '.uasm']);
+    assert.strictEqual(getEditorStyleForFilename('main.rs', meta), 'rust');
+    assert.strictEqual(getEditorStyleForFilename('kernels.uasm', meta), 'uasm');
   });
 
   it('scans include_bytes!/include_str! as dependencies', function () {
@@ -21,6 +32,18 @@ describe('urust tool', function () {
       'const S: &str = include_str!( "t.txt" );\n// include_bytes!("x") is also matched\n';
     const deps = matchDependencyPatterns(src, getIncludePatterns('urust'));
     assert.deepStrictEqual(deps, ['art/a.bin', 't.txt', 'x']);
+  });
+
+  it('scans .uasm imports as module dependencies', function () {
+    const src = 'import kernels\n' +
+      'import c64::util   ; the module file is c64.rs or c64.uasm\n' +
+      'import rs8::vcs\n';
+    const deps = matchDependencyPatterns(src, getIncludePatterns('urust'));
+    // a local import becomes `mod kernels; use kernels::*;`; an rs8 import is
+    // the bundled library module
+    assert.deepStrictEqual(deps,
+      ['vcs.rs', 'kernels.rs', 'c64.rs', 'kernels/mod.rs', 'c64/mod.rs',
+        'kernels.uasm', 'c64.uasm']);
   });
 
   it('scans //#resource files as dependencies', function () {
@@ -35,7 +58,8 @@ describe('urust tool', function () {
     // `mod` names the file (foo.rs or foo/mod.rs); `use` is scanned for editor
     // links but skips the bare rs8 items (they live in the compiler)
     assert.deepStrictEqual(deps,
-      ['audio.rs', 'bcd.rs', 'audio/mod.rs', 'bcd/mod.rs', 'audio.rs', 'bcd.rs']);
+      ['audio.rs', 'bcd.rs', 'audio/mod.rs', 'bcd/mod.rs', 'audio.uasm', 'bcd.uasm',
+        'audio.rs', 'bcd.rs', 'audio.uasm', 'bcd.uasm']);
   });
 
   it('links rs8 register modules to the bundled sources', function () {

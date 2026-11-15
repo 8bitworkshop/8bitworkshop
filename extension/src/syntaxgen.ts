@@ -8,6 +8,7 @@
 import * as K from '../../src/parser/asmkeywords';
 import { VERILOG_LANGUAGE } from './verilogsyntax';
 import { RUST_LANGUAGE } from './rustsyntax';
+import { UASM_LANGUAGE } from './uasmsyntax';
 
 export interface AsmLanguage {
   id: string;             // language ID, e.g. '8bws-6502'
@@ -286,6 +287,12 @@ export function makeContributions(dir = './out/syntaxes') {
       id: RUST_LANGUAGE.id,
       aliases: RUST_LANGUAGE.aliases,
       configuration: `${dir}/${RUST_LANGUAGE.id}.language-configuration.json`,
+    }, {
+      // .uasm is urust's own assembly format, so the extension claims it
+      id: UASM_LANGUAGE.id,
+      aliases: UASM_LANGUAGE.aliases,
+      extensions: UASM_LANGUAGE.extensions,
+      configuration: `${dir}/${UASM_LANGUAGE.id}.language-configuration.json`,
     }],
     grammars: [...ASM_LANGUAGES.map((l) => ({
       language: l.id,
@@ -299,6 +306,10 @@ export function makeContributions(dir = './out/syntaxes') {
       language: RUST_LANGUAGE.id,
       scopeName: RUST_LANGUAGE.scopeName,
       path: `${dir}/${RUST_LANGUAGE.id}.tmLanguage.json`,
+    }, {
+      language: UASM_LANGUAGE.id,
+      scopeName: UASM_LANGUAGE.scopeName,
+      path: `${dir}/${UASM_LANGUAGE.id}.tmLanguage.json`,
     }],
   };
 }

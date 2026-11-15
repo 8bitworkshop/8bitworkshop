@@ -206,6 +206,40 @@ describe('rust grammar', function () {
   });
 });
 
+describe('uasm grammar', function () {
+  let g: IGrammar;
+  before(async () => { g = await loadGrammar('uasm'); });
+
+  it('reads declarations and proc headers', function () {
+    assert.equal(scopeOf(g, 'proc bump(v: u8 in a) -> u8 in a', 'proc'), 'keyword.control');
+    assert.equal(scopeOf(g, 'proc bump(v: u8 in a) -> u8 in a', 'bump'), 'entity.name.function');
+    assert.equal(scopeOf(g, 'proc bump(v: u8 in a) -> u8 in a', 'u8'), 'storage.type');
+    assert.equal(scopeOf(g, 'proc bump(v: u8 in a) -> u8 in a', 'in'), 'keyword.control');
+    assert.equal(scopeOf(g, 'proc bump(v: u8 in a) -> u8 in a', 'a'), 'constant.other.register');
+    assert.equal(scopeOf(g, 'const LINES = 192', 'const'), 'keyword.control');
+    assert.equal(scopeOf(g, 'const LINES = 192', 'LINES'), 'variable.other');
+    assert.equal(scopeOf(g, 'const LINES = 192', '192'), 'constant.numeric');
+    assert.equal(scopeOf(g, 'scope k {', 'k'), 'entity.name.namespace');
+    assert.equal(scopeOf(g, 'import rs8::vcs', 'import'), 'keyword.control');
+    assert.equal(scopeOf(g, 'import rs8::vcs', 'rs8::vcs'), 'entity.name.namespace');
+  });
+
+  it('reads attributes, labels and native mnemonics', function () {
+    assert.equal(scopeOf(g, '@reset', '@reset'), 'meta.attribute');
+    assert.equal(scopeOf(g, '@nocross(256)', '256'), 'constant.numeric');
+    assert.equal(scopeOf(g, '@loop:', '@loop'), 'entity.name.label');
+    assert.equal(scopeOf(g, '    lda #$10', 'lda'), 'keyword.other.mnemonic');
+    assert.equal(scopeOf(g, '    lda #$10', '$10'), 'constant.numeric.hex');
+    assert.equal(scopeOf(g, '    lda #$10', '#'), 'keyword.operator');
+    assert.equal(scopeOf(g, '    sta COLUP0', 'COLUP0'), 'constant.other');
+  });
+
+  it('does not mistake a type array for a comment', function () {
+    assert.equal(scopeOf(g, 'data Font: [u8; 50] = [1]', ';'), 'punctuation');
+    assert.equal(scopeOf(g, '; a comment', '; a comment'), 'comment.line.semicolon');
+  });
+});
+
 describe('assembler languages', function () {
   it('match package.json', function () {
     const pkg = JSON.parse(fs.readFileSync(path.join(EXT_ROOT, 'package.json'), 'utf8'));

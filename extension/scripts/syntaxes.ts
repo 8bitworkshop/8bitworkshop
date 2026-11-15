@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 import { VERILOG_LANGUAGE, makeVerilogConfiguration, makeVerilogGrammar } from '../src/verilogsyntax';
 import { RUST_LANGUAGE, makeRustConfiguration, makeRustGrammar } from '../src/rustsyntax';
+import { UASM_LANGUAGE, makeUasmConfiguration, makeUasmGrammar } from '../src/uasmsyntax';
 import { ASM_LANGUAGES, makeGrammar, makeLanguageConfiguration } from '../src/syntaxgen';
 
 const outDir = path.resolve(__dirname, 'syntaxes');
@@ -17,4 +18,6 @@ writeFileSync(path.join(outDir, `${VERILOG_LANGUAGE.id}.tmLanguage.json`), JSON.
 writeFileSync(path.join(outDir, `${VERILOG_LANGUAGE.id}.language-configuration.json`), JSON.stringify(makeVerilogConfiguration(), null, 1));
 writeFileSync(path.join(outDir, `${RUST_LANGUAGE.id}.tmLanguage.json`), JSON.stringify(makeRustGrammar(), null, 1));
 writeFileSync(path.join(outDir, `${RUST_LANGUAGE.id}.language-configuration.json`), JSON.stringify(makeRustConfiguration(), null, 1));
-console.error(`[syntaxes] wrote ${ASM_LANGUAGES.length + 2} grammars to ${outDir}`);
+writeFileSync(path.join(outDir, `${UASM_LANGUAGE.id}.tmLanguage.json`), JSON.stringify(makeUasmGrammar(), null, 1));
+writeFileSync(path.join(outDir, `${UASM_LANGUAGE.id}.language-configuration.json`), JSON.stringify(makeUasmConfiguration(), null, 1));
+console.error(`[syntaxes] wrote ${ASM_LANGUAGES.length + 3} grammars to ${outDir}`);

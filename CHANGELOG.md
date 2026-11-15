@@ -17,6 +17,7 @@ See [extension/CHANGELOG.md](extension/CHANGELOG.md).
 
 ### Builds and tools
 
+- urust's `.uasm` assembly front end builds too. A `.uasm` file is urust source on every 6502/Z80/6809 platform, can be a `mod`ule of a Rust program (`mod kernels;` finds `kernels.uasm`) or a whole program with an `@reset` proc, and is editable with its own highlighting in the IDE and the VS Code extension. Its `import kernels` line is followed as a module dependency, and platform detection recognizes an `@reset` `.uasm` program.
 - 6809 platforms can ask for a DECB `.bin` from lwlink instead of a raw image (`link_format: 'decb'` in `PLATFORM_PARAMS`).
 - oscar64 builds with `-O0 -Oz -Op -Oo` instead of `-O1 -Oz -Op -Ox`, so its debug info (`.dbj`) lists local variables with their scope lines, not just parameters, and variables without a scope (parameters) are live over their own function. The size flags `-Oz -Op -Oo` keep the debug info. `//#flag c -O2` in a source file now takes effect for oscar64 (it ignored `//#flag` before) and overrides the default.
 - Disassembly names local variables (urust) in operands, e.g. `LDA score+1`, in the IDE's disassembly view, the `8bws` run script (`dis`, `step`, `trace`) and the VS Code disassembly. A local is resolved in the frame of the instruction's own function rather than the PC's, and wins over a global at the same address.

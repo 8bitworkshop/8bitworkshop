@@ -10,6 +10,7 @@ import { wiz, wizStreamParser } from "./lang-wiz";
 import { verilog, verilogStreamParser } from "./lang-verilog";
 import { inform6, inform6StreamParser } from "./lang-inform6";
 import { dialog, dialogStreamParser } from "./lang-dialog";
+import { uasm, uasmStreamParser } from "./lang-uasm";
 import { basic, basicStreamParser } from "./lang-basic";
 import { fastBasic, fastBasicStreamParser } from "./lang-fastbasic";
 import { batariBasic, batariBasicStreamParser } from "./lang-bataribasic";
@@ -65,6 +66,10 @@ export const parserRegistry: Record<string, ParserRegistryEntry> = {
   'text/x-wiz': {
     language: wiz(),
     parser: wizStreamParser
+  },
+  uasm: {
+    language: uasm(),
+    parser: uasmStreamParser
   },
   verilog: {
     language: verilog(),

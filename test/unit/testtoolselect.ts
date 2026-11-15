@@ -36,7 +36,7 @@ describe('tool selection table', () => {
     const EXTS = ['.c', '.h', '.s', '.a', '.asm', '.inc', '.ca65', '.dasm', '.acme', '.xa', '.wiz', '.ecs',
         '.cpp', '.cc', '.o64', '.bb', '.bas', '.fb', '.cc2600', '.cc7800', '.c78', '.lnk', '.nesasm',
         '-llvm.c', '.z', '.ns', '.scc', '.sgb', '.xasm', '.lwasm', '.vasm', '.armips', '.v', '.ice',
-        '.dg', '.inf'];
+        '.dg', '.inf', '.uasm'];
 
     it('should agree with every platform object', async () => {
         installNodeMocks();

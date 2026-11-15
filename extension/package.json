@@ -463,6 +463,17 @@
           "Rust (urust)"
         ],
         "configuration": "./out/syntaxes/8bws-rust.language-configuration.json"
+      },
+      {
+        "id": "8bws-uasm",
+        "aliases": [
+          "urust Assembly",
+          "uasm"
+        ],
+        "extensions": [
+          ".uasm"
+        ],
+        "configuration": "./out/syntaxes/8bws-uasm.language-configuration.json"
       }
     ],
     "grammars": [
@@ -490,6 +501,11 @@
         "language": "8bws-rust",
         "scopeName": "source.rust.8bws",
         "path": "./out/syntaxes/8bws-rust.tmLanguage.json"
+      },
+      {
+        "language": "8bws-uasm",
+        "scopeName": "source.uasm.8bws",
+        "path": "./out/syntaxes/8bws-uasm.tmLanguage.json"
       }
     ],
     "menus": {

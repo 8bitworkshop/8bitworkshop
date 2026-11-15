@@ -434,7 +434,7 @@ export function findMainCandidates(platform: string, files: string[], texts: Map
     var r = 0;
     if (/^main\./i.test(basename(f))) r += 4;
     if (/\bmain\s*\(/.test(t)) r += 2;
-    if (/\b(reset|start)\s*:|\.org\s+\$?[fF][fF][fF][aAcC]|\bRESET\b/i.test(t)) r += 1;
+    if (/\b(reset|start)\s*:|\.org\s+\$?[fF][fF][fF][aAcC]|\bRESET\b|@reset\b/i.test(t)) r += 1;
     return r;
   };
   candidates.sort((a, b) => rank(b) - rank(a) || a.localeCompare(b));

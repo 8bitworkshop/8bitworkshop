@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `.uasm` files build with urust too: urust's assembly front end can be a `mod`ule of a Rust program or a whole program with an `@reset` proc. `mod kernels;` finds `kernels.uasm`, and a `.uasm` file's `import kernels` pulls in `kernels.rs` or `kernels.uasm`. The extension claims `.uasm` and highlights its declarations, attributes and native instructions.
+- Platform detection recognizes the `@reset` proc in a `.uasm` program.
 - Rust programs (`.rs`) build with urust on every platform it supports (NES, Atari 2600/7800, C64, Atari 8-bit, Apple II, VIC-20, ZX Spectrum, ColecoVision, MSX, Game Boy, and devel-6502). Other Z80 platforms still send `.rs` to urust, but no longer get the Rust fallback language or the rust-analyzer settings, since the build would fail without a target.
 - Platform detection recognizes the `rs8::` module an urust program uses (`use rs8::nes::*;` picks the NES), and the ZX Spectrum maps to urust's `zx-spectrum` target.
 - `.rs` is treated as a shared extension: 8bitworkshop never claims it, never shows "No platform" for an unrelated Rust file, and leaves the `rust` language to your Rust extension. Without one, a built-in `Rust (urust)` grammar highlights the file inside a project.

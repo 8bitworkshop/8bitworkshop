@@ -74,6 +74,15 @@ describe('detect', () => {
     assert.deepStrictEqual(a8.map(d => d.platform).sort(), ['atari8-5200', 'atari8-800']);
   });
 
+  it('finds a urust platform from a .uasm program', async () => {
+    var d = await detectProject(files({
+      'game.uasm': 'import rs8::nes\n@reset\nproc start()\n{\n    rts\n}\n',
+    }));
+    assert.strictEqual(d[0].platform, 'nes');
+    assert.ok(isClearWinner(d));
+    assert.strictEqual(d[0].mainFile, 'game.uasm');
+  });
+
   it('prefers the folder name over a shared Atari library header', async () => {
     var map: { [fn: string]: string } = {
       'game.c': '#include <atari.h>\nvoid main() {}\n',

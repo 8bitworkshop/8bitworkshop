@@ -13,7 +13,7 @@ import {
   arrayCompare, byteArrayToUTF8, bytesToFileData, decodeQueryString, getBasePlatform, getCookie, getFilenameForPath, getFilenamePrefix,
   getRootBasePlatform, getWithBinary, hex, highlightDifferences, isProbablyBinary, isProductionHost, loadScript, parseBool, stringToByteArray
 } from "../common/util";
-import { getSkeletonName, getPlatformToolHelpURL, getToolMeta, getToolVersionLabel, TOOL_META } from "../common/toolmeta";
+import { getEditorStyleForFilename, getSkeletonName, getPlatformToolHelpURL, getToolMeta, getToolVersionLabel, TOOL_META } from "../common/toolmeta";
 import { getAppVersionLabel } from "../common/version";
 import { PLATFORM_PARAMS } from "../worker/platforms";
 import { hasErrors } from "../worker/listingutils";
@@ -388,7 +388,8 @@ function refreshWindowList() {
     if (tool == 'dasm' && path.endsWith(".h") && getCurrentMainFilename().endsWith(".c")) {
       tool = 'cc65';
     }
-    var mode = tool && getToolMeta(tool)?.editorStyle;
+    var meta = tool && getToolMeta(tool);
+    var mode = meta && getEditorStyleForFilename(path, meta);
     return new SourceEditor(path, mode);
   }
 

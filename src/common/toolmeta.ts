@@ -116,6 +116,10 @@ export interface ToolMeta {
   extensions: string[];
   /** CodeMirror editor mode (was TOOL_TO_SOURCE_STYLE) */
   editorStyle?: string;
+  /** editor style for files with a particular extension, when one tool
+   *  consumes more than one language (urust's `.uasm` is assembly, `.rs` is
+   *  Rust). Keys are lowercase extensions. */
+  editorStyles?: { [ext: string]: string };
   /** documentation URL (was TOOL_TO_HELPURL). Where upstream publishes
    *  version tags, link to the tag matching TOOL_META.version so docs stay
    *  accurate for the vendored binary; refresh when bumping version. */
@@ -269,15 +273,21 @@ export const DIALOG_INCLUDE_PATTERNS: RegExp[] = [
 
 // urust: include_bytes!("file") and include_str!("file"); the path is relative
 // to the including source file, like the other tools' include directives.
-// `mod foo;` pulls in foo.rs (or foo/mod.rs) beside the including file, the
-// way rustc resolves a module, so those files ride along as includes. `use
-// foo::...;` only names a module `mod` already declared; it is still scanned
-// so the editor can link it. The rs8 register modules resolve to the sources
+// `mod foo;` pulls in foo.rs (or foo/mod.rs, or foo.uasm) beside the including
+// file, the way rustc resolves a module, so those files ride along as includes.
+// `use foo::...;` only names a module `mod` already declared; it is still
+// scanned so the editor can link it. A `.uasm` file's `import foo` becomes
+// `mod foo; use foo::*;`, so it names the same module files. The rs8 register
+// modules resolve to the sources
 // shipped in urust-fs.zip (see the tool's includeDirs): urust splices them in
 // from its .wasm, so they're copied out again for the editor to read; path
 // keywords (self/super/crate) stay out. urust loads modules itself -- no
 // separate link step is involved.
 const URUST_MOD_PATTERN = /^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/gm;
+// `.uasm` imports a local module with `import kernels` (no semicolon in the
+// grammar, but accept one): urust translates it to `mod kernels; use
+// kernels::*;`. `import rs8::...` is a library module, matched below.
+const URUST_IMPORT_PATTERN = /^\s*import\s+(?!rs8\b)([A-Za-z_][A-Za-z0-9_]*)(?:\s*::.*?)?\s*(?:;.*)?$/gm;
 // The module/child table is generated from the zip the editor can open
 // (scripts/urustmods.mjs -> src/common/urustmods.ts); test/unit/testurust.ts
 // checks it against the zip both ways, so a module urust adds cannot go
@@ -350,8 +360,13 @@ export const URUST_INCLUDE_PATTERNS: (RegExp | ToolIncludePattern)[] = [
   ...SHARED_RESOURCE_PATTERNS,
   { re: URUST_MOD_PATTERN, suffix: '.rs' },
   { re: URUST_MOD_PATTERN, suffix: '/mod.rs' },
+  { re: URUST_MOD_PATTERN, suffix: '.uasm' },
   URUST_RS8_MODULE,
   { re: /^\s*(?:pub(?:\([^)]*\))?\s+)?use\s+(?!self\b|super\b|crate\b|rs8\b)([A-Za-z_][A-Za-z0-9_]*)\s*::/gm, suffix: '.rs' },
+  { re: /^\s*(?:pub(?:\([^)]*\))?\s+)?use\s+(?!self\b|super\b|crate\b|rs8\b)([A-Za-z_][A-Za-z0-9_]*)\s*::/gm, suffix: '.uasm' },
+  { re: URUST_IMPORT_PATTERN, suffix: '.rs' },
+  { re: URUST_IMPORT_PATTERN, suffix: '/mod.rs' },
+  { re: URUST_IMPORT_PATTERN, suffix: '.uasm' },
   // `use rs8::{io, reset};` -- every item of the group, nested groups too
   { scan: scanRs8UseGroups },
 ];
@@ -886,8 +901,9 @@ export const TOOL_META: { [id: string]: ToolMeta } = {
   // zx-spectrum (see URUST_PLATFORM_NAMES below)
   urust: {
     id: 'urust', name: 'urust', kind: 'compiler', arch: '6502',
-    extensions: ['.rs'],
+    extensions: ['.rs', '.uasm'],
     editorStyle: 'rust',
+    editorStyles: { '.uasm': 'uasm' },
     wasmModule: 'urust',
     helpURL: URUST_DOCS_URL,
     version: '0.0.1',
@@ -998,6 +1014,22 @@ export function getToolHelpURL(tool: string, platform?: string): string | undefi
   let meta = getToolMeta(tool);
   if (!meta) return undefined;
   return (platform && getPlatformToolHelpURL(tool, platform)) || meta.helpURL;
+}
+
+/**
+ * The editor style for `fn`. A tool may consume more than one language, so
+ * an extension-specific `editorStyles` entry wins over its `editorStyle`
+ * (urust's `.uasm` is assembly, its `.rs` files are Rust).
+ */
+export function getEditorStyleForFilename(fn: string, meta?: ToolMeta): string | undefined {
+  let styles = meta ? [meta] : getToolMetaForFilename(fn);
+  for (let m of styles) {
+    for (let ext in m.editorStyles || {})
+      if (fn.endsWith(ext)) return m.editorStyles[ext];
+  }
+  if (meta) return meta.editorStyle;
+  for (let m of styles) if (m.editorStyle) return m.editorStyle;
+  return undefined;
 }
 
 /**

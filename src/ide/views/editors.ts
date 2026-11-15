@@ -6,7 +6,7 @@ import { crosshairCursor, Decoration, DecorationSet, drawSelection, dropCursor, 
 import { CodeAnalyzer } from "../../common/analysis";
 import { ProbeFlags, ProbeRecorder } from "../../common/probe";
 import { getFilenameForPath, getFolderForPath, hex, rpad } from "../../common/util";
-import { getIncludeDirs, getIncludePatterns, getLinkPatterns, getSharedFileSystemName, getSystemIncludePatterns, getToolMeta, getToolMetaForFilename } from "../../common/toolmeta";
+import { getEditorStyleForFilename, getIncludeDirs, getIncludePatterns, getLinkPatterns, getSharedFileSystemName, getSystemIncludePatterns, getToolMeta, getToolMetaForFilename } from "../../common/toolmeta";
 import { WorkerMessage } from "../../common/workertypes";
 import { SourceFile, SourceLocation, WorkerError } from "../../common/workertypes";
 import { parserRegistry, getLanguageSupportForStyle, getDefaultLanguageParser } from "../../parser/registry";
@@ -1208,8 +1208,9 @@ export function resolveIncludeFile(fn: string): string | null {
 // tool/language matches.
 export function getLanguageForFilename(fn: string): Extension | null {
   for (var meta of getToolMetaForFilename(fn)) {
-    if (!meta.editorStyle) continue;
-    var lang = getLanguageSupportForStyle(meta.editorStyle);
+    var style = getEditorStyleForFilename(fn, meta);
+    if (!style) continue;
+    var lang = getLanguageSupportForStyle(style);
     if (lang) return lang;
   }
   return null;

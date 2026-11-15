@@ -27,11 +27,20 @@ instead of the included toolchains.
 
 ### Rust (urust)
 
-`.rs` files on a platform urust supports (NES, Atari 2600, C64, Atari
-8-bit, Apple II, VIC-20, ZX Spectrum, and devel-6502) build with
-[urust](https://github.com/sehugg/urust), a compiler for a subset of
-Rust. It has no Cargo target: `rs8` and the register modules are built
-in, and `#[reset]`/`#[nmi]` mark the entry points.
+`.rs` files on a platform urust supports (NES, Atari 2600/7800, C64,
+Atari 8-bit, Apple II, VIC-20, ZX Spectrum, ColecoVision, MSX, Game Boy,
+and devel-6502) build with [urust](https://github.com/sehugg/urust), a
+compiler for a subset of Rust. It has no Cargo target: `rs8` and the
+register modules are built in, and `#[reset]`/`#[nmi]` mark the entry
+points.
+
+`.uasm` files build with urust too. A `.uasm` file is urust's assembly
+front end: Rust-like declarations (`import`, `const`, `scope`, `proc`)
+around native assembly bodies. Load one from Rust with `mod kernels;`
+(urust finds `kernels.uasm` where it looks for `kernels.rs`), or build
+one as the main file when it has an `@reset` proc. The extension claims
+`.uasm`; the IDE highlights its declarations, `@attributes` and the
+instructions of every CPU urust targets.
 
 8bitworkshop never claims `.rs`: if you have a Rust extension installed,
 VS Code keeps using its `rust` language, so rust-analyzer's parsing,
@@ -46,7 +55,7 @@ write settings that turn off the check, its unresolved-name
 diagnostics (syntax and type errors stay), proc-macro expansion and the
 Run/Debug lenses while leaving highlighting, hover and navigation on. For an existing project, run **8bitworkshop: Set Up
 rust-analyzer**; it writes those settings to the folder's settings (asking
-first for a `.rs` file outside a urust project) or to a closed project's
+first for a `.rs` or `.uasm` file outside a urust project) or to a closed project's
 `.vscode/settings.json`.
 
 ## Errors

@@ -77,6 +77,7 @@ describe('projectFor', function () {
   it('knows which extensions are only ours', function () {
     assert.ok(isOwnExtension('game.dasm'));
     assert.ok(isOwnExtension('game.ca65'));
+    assert.ok(isOwnExtension('game.uasm'));
     assert.ok(!isOwnExtension('game.c'));
     assert.ok(!isOwnExtension('game.s'));
     assert.ok(!isOwnExtension('notes.txt'));

@@ -1175,9 +1175,9 @@ async function setupRustAnalyzer() {
   var inProject = !!project && isUrustProject(project.platform, project.tool);
   var uri = activeUri();
   var dir = inProject ? project!.scope
-    : uri && uri.scheme === 'file' && /\.rs$/i.test(uri.fsPath) ? path.dirname(uri.fsPath) : undefined;
+    : uri && uri.scheme === 'file' && /\.(rs|uasm)$/i.test(uri.fsPath) ? path.dirname(uri.fsPath) : undefined;
   if (!dir) {
-    vscode.window.showInformationMessage('8bitworkshop: open a Rust file or set a urust project as the main file first.');
+    vscode.window.showInformationMessage('8bitworkshop: open a Rust or .uasm file or set a urust project as the main file first.');
     return;
   }
   if (!inProject) {

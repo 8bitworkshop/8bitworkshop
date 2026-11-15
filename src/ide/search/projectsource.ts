@@ -122,6 +122,8 @@ export class ProjectSource implements SearchSource {
         return 'text/x-csrc';
       case 'rs':
         return 'rust';
+      case 'uasm':
+        return 'uasm';
       case 'asm':
       case 'a65':
       case 'inc':

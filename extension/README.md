@@ -56,7 +56,8 @@ off for that folder.
 
 Rust projects keep your Rust extension: `.rs` files stay in rust-analyzer's
 hands for highlighting and navigation, and 8bitworkshop builds them with
-urust. New urust projects turn off rust-analyzer's `cargo check`, unresolved-name diagnostics, rs8
+urust. Its `.uasm` assembly modules and programs build too; the extension
+highlights them itself. New urust projects turn off rust-analyzer's `cargo check`, unresolved-name diagnostics, rs8
 macro expansion and Run/Debug lenses, none of which have a target to work
 with; see [Building](docs/building.md#rust-urust).
 
