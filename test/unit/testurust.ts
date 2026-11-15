@@ -151,6 +151,9 @@ describe('urust tool', function () {
     assert.strictEqual(urustPlatformName('nes'), 'nes');
     assert.strictEqual(urustPlatformName('c64'), 'c64');
     assert.strictEqual(urustPlatformName('atari8-800xl'), 'atari8');
+    // the 5200 shares the atari8 root but is a different urust target
+    assert.strictEqual(urustPlatformName('atari8-5200'), 'atari5200');
+    assert.strictEqual(urustPlatformName('atari8-5200.mame'), 'atari5200');
     assert.strictEqual(urustPlatformName('vcs'), 'vcs');
     assert.strictEqual(urustPlatformName('apple2'), 'apple2');
     assert.strictEqual(urustPlatformName('vic20'), 'vic20');

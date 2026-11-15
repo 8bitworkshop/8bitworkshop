@@ -412,6 +412,18 @@ describe('Worker', function() {
     assert.ok(result.symbolmap['main'] >= 0xc000, 'cartridge code should be at $C000 and up');
   });
 
+  it('should compile urust for the Atari 5200, not the Atari 8-bit', async function() {
+    if (!haveUrust) return this.skip();
+    var code = 'use rs8::atari5200::*;\n#[reset]\nfn main() {\n    COLBK.write(0x0f);\n}\n';
+    var result = await buildOne({code:code, platform:'atari8-5200', tool:'urust', path:'main.rs', mainfile:true});
+    assert.ok(!result.errors || result.errors.length === 0, JSON.stringify(result.errors));
+    // a 5200 cart is 32K at $4000; the atari8 backend would make an 8K cart
+    // with code at $A000 and the computers' GTIA at $D000
+    assert.equal(result.output.length, 0x8000);
+    assert.equal(result.symbolmap['rs8__atari5200__COLBK'], 0xc01a);
+    assert.ok(result.symbolmap['main'] < 0xa000, 'code should be in the 5200 cart at $4000');
+  });
+
   it('should report urust errors with line and column', async function() {
     if (!haveUrust) return this.skip();
     var code = 'use rs8::reset;\n#[reset]\nfn main() {\n    let x: u8 = "hi";\n}\n';

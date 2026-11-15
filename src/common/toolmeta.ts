@@ -22,7 +22,7 @@
  * (unless noWorkerBuild) and vice versa.
  */
 
-import { getRootBasePlatform } from "./util";
+import { getBasePlatform, getRootBasePlatform } from "./util";
 import { URUST_RS8_CHILDREN, URUST_RS8_MODULES } from "./urustmods";
 
 export { URUST_RS8_CHILDREN, URUST_RS8_MODULES };
@@ -1118,6 +1118,9 @@ const URUST_PASSTHROUGH_ROOTS = new Set([
 
 /** urust's `--platform` name for an 8bitworkshop platform id, if it has one. */
 export function urustPlatformName(platform: string): string | undefined {
+  // the 5200 shares the atari8 root but has its own urust backend and cart
+  // layout; resolving it by root would silently build an Atari 8-bit image
+  if (getBasePlatform(platform) === 'atari8-5200') return 'atari5200';
   var root = getRootBasePlatform(platform);
   if (URUST_PLATFORM_NAMES[root]) return URUST_PLATFORM_NAMES[root];
   return URUST_PASSTHROUGH_ROOTS.has(root) ? root : undefined;
