@@ -82,7 +82,7 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
    // MOS65C02 when `enhanced` is set.
    cpu: MOS6502 = new MOS6502();
    grdirty = new Array(0xc000 >> 7);
-   grparams = { dirty: this.grdirty, grswitch: GR_TXMODE, mem: this.ram, auxmem: null as Uint8Array, col80: false, an3: true };
+   grparams = { dirty: this.grdirty, grswitch: GR_TXMODE, mem: this.ram, auxmem: null as Uint8Array, col80: false, an3: true, enhanced: false };
    ap2disp;
    kbdlatch = 0;
    soundstate = 0;
@@ -160,6 +160,8 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
          this.enhanced = true;
          this.auxRAM = new Uint8Array(0x10000);
          this.grparams.auxmem = this.auxRAM;
+         // draw glyphs from the //e video ROM instead of the II+ charset
+         this.grparams.enhanced = true;
          // 80 columns is 560 pixels; 40-column modes are drawn at 2x
          this.canvasWidth = 560;
          // 560x192 is the same 4:3 tube as the 280x192 II+ raster, with half-as-
@@ -722,7 +724,9 @@ const GR_HIRES = 8;
 type AppleGRParams = {
    dirty: boolean[], grswitch: number, mem: Uint8Array,
    // Apple //e video: 64K auxiliary RAM and the 80COL switch
-   auxmem?: Uint8Array, col80?: boolean, an3?: boolean
+   auxmem?: Uint8Array, col80?: boolean, an3?: boolean,
+   // use the //e character generator (incl. lowercase) instead of the II+ one
+   enhanced?: boolean
 };
 
 var Apple2Display = function (pixels: Uint32Array, apple: AppleGRParams, width: number = 280) {
@@ -907,7 +911,7 @@ var Apple2Display = function (pixels: Uint32Array, apple: AppleGRParams, width: 
       var on = invert ? PIXELOFF : PIXELON;
       var off = invert ? PIXELON : PIXELOFF;
       for (var yy = 0; yy < 8; yy++) {
-         var chr = apple2_charset[(b << 3) + yy];
+         var chr = apple.enhanced ? getApple2eVideoROM()[(b << 3) + yy] : apple2_charset[(b << 3) + yy];
          for (var px = 0; px < 7; px++) {
             fillPixels(base + px * scale, scale, ((chr & (64 >> px)) != 0) ? on : off);
          }
@@ -1120,6 +1124,71 @@ var Apple2Display = function (pixels: Uint32Array, apple: AppleGRParams, width: 
    this.invalidate = function () {
       oldgrmode = -1;
    }
+}
+
+// Apple //e video ROM (342-0133-A, US 1982), LZG-compressed: the 4K character
+// generator. Page 0 ($000-$3FF) holds the normal glyphs for codes $00-$7F
+// (including lowercase at $60-$7F), page 1 ($400) is its inverse, and pages
+// 2-3 ($800/$C00) are the ALTCHARSET/MouseText set. The ROM stores each pixel
+// row with bit 0 leftmost, the opposite of apple2_charset, so the bytes are
+// bit-reversed when decoded.
+const APPLE2E_VIDEO_ROM_LZG =
+   "TFpHAAAQAAAACrZ66/4EAQEDBQccIio6GgI8AAgUIiI+IiIAHiIiB0IAHCICAgIiHAVIBwEeAD4CAh4CAj4H5QIA" +
+   "PAeBMiI8AAUVBS8iABwIBwIcACAHAgUwIhIKBgoSIgAFHwcBPgAiNioqBWAiIiYqMgVoAwNQAwNYAwNIBUgqEiwF" +
+   "iAVwHCICHAMCQD4DA1AIBTAF6AfDFAWIKio2AwJIFAMCswfjBWA+IBAIBAMCoAYHAj4AAAIECBAgAAA+MAcCBQgD" +
+   "AuIHoQcFfwflAAMEXggAFBQUBYgUFD4HIRQACDwKHCgeCAAGJhAIBDIwAAQKCgQDAqAFZgWwBAICAgQFMhAgICAQ" +
+   "B+EqHAgcKgUUCAg+AwUbBQMEB8IDAnUHBQURAwOgAAAcIjIqJiIcAAgMAyQ4HCIgGAMDuCAQGAMC+BAYFBI+EBAA" +
+   "PgIeAyNQOAQCHgMiAAMD4AQEBSgiB0IH4jwgEA4DA1QDBZIDA3AFHgMC+gMDdwMCeQUEBXIFKBADA+gcAz/4Az74" +
+   "Az34BwR/AyQUBwIcIDwiPAACAyJXIh4FCAMC2jwAIAUOIgUQBRgiPgUIGCQEHgMicAVIIjwgHAXoIgAIAAMiuRwA" +
+   "EAAYEBAQEgwCAiISDhIiBY4FUAAANioqKgMCcgXoBbgiBVADBPoAADwDAkggAAA6BgMiCAUIAhwgHgAEAwJnJBgF" +
+   "CAUnMiwH5BQDItoDA/kH4gMC+QXQPCAcAAA+EAgEPgA4DAwGDAw4A0TQBwEOGBgwGBgOACwaAwXnKhQHIQAA493V" +
+   "xeX9w//3693dwd3d/+Hd3QdC/+Pd/f393eMFSAcB4f/B/f3h/f3BB+X9/8MHgc3dw/8FFQUv3f/j9wcC4//fBwIF" +
+   "MN3t9fn17d3/BR8HAcH/3cnV1QVg3d3Z1c0FaAMDUAMDWAMDSAVI1e3TBYgFcOPd/eMDAkDBAwNQ9wUwBegHw+sF" +
+   "iNXVyQMCSOsDArMH4wVgwd/v9/sDAqD5BwLB///9+/fv3///wc8HAgUIAwLiB6EHBYAH5f8DBF73/+vr6wWI6+vB" +
+   "ByHr//fD9ePX4ff/+dnv9/vNz//79fX7AwKgBWYFsPv9/f37BTLv39/f7wfh1eP349UFFPf3wQMFGwUD+wfCAwJ1" +
+   "BwUFEQMDoP//493N1dnd4//38wMkOOPd3+cDA7jf7+cDAvjv5+vtwe/v/8H94QMjUMf7/eEDIgADA+D7+wUo3QdC" +
+   "B+LD3+/xAwNUAwWSAwNwBR4DAvoDA3cDAnkFBAVyBSjvAwPoAz/4Az/4AyQUBwLj38Pdw//9AyJX3eEFCAMC2sP/" +
+   "3wUO3QUQBRjdwQUI59v74QMicAVI3cPf4wXo3f/3/wMiueP/7//n7+/v7fP9/d3t8e3dBY4FUP//ydXV1QMCcgXo" +
+   "BbjdBVADBPr//8MDAkjf///F+QMiCAUI/ePf4f/7AwJn2+cFCAUnzdMH5OsDItoDA/kH4gMC+QXQw9/j///B7/f7" +
+   "wf/H8/P58/PHA0TQBwHx5+fP5+fx/9PlAwXn1esHIQMoAf7+7rv+/v///f3ddwMCd/z8zDP8/P//+/u77gMC5/r6" +
+   "qqr6+v//+fmZZvn5///4+Igi+PgDQtR33QNC4Pb2Zpn29v//9fVVVfX1///09EQR9PT///PzM8zz8///8vIiiPLy" +
+   "///x8RFE8fH///DwAADw8P//7+8HYu677u4HZO3t3Xft7e677OzMM+zs7rvr67vu6+vuu+rqqqrq6u676emZZunp" +
+   "7rvo6Igi6Ojuu+fnd93n5+675uZmmebm7rvl5VVV5eXuu+TkRBHk5O674+MzzOPj7rvi4iKI4uLuu+HhEUTh4e67" +
+   "4OAAAODg7rsDImrf39133t7uu97e3Xfd3Qdk3NzMM9zc3Xfb27vu29vdd9raqqra2t132dmZZtnZ3XfY2Igi2Njd" +
+   "d9fXd93X19131tZmmdbW3XfV1VVV1dXdd9TURBHU1N1309MzzNPT3XfS0iKI0tLdd9HREUTR0d130NAAANDQ3XfP" +
+   "z///z8/MM87O7rvOzswzzc3dd83NzDPMzAdky8u77svLzDPKyqqqysrMM8nJmWbJycwzyMiIIsjIzDPHx3fdx8fM" +
+   "M8bGZpnGxswzxcVVVcXFzDPExEQRxMTMM8PDM8zDw8wzwsIiiMLCzDPBwRFEwcHMM8DAAADAwMwzv7///7+/u+6+" +
+   "vu67vr677r293Xe9vbvuvLzMM7y8u+67uwdkurqqqrq6u+65uZlmubm77ri4iCK4uLvut7d33be3u+62tmaZtra7" +
+   "7rW1VVW1tbvutLREEbS0u+6zszPMs7O77rKyIoiysrvusbERRLGxu+6wsAAAsLC77q+v//+vr6qqrq7uu66uqqqt" +
+   "rd13ra2qqqyszDOsrKqqq6u77qurqgcHqamZZqmpqqqoqIgiqKiqqqend92np6qqpqZmmaamqqqlpVVVpaWqqqSk" +
+   "RBGkpKqqo6MzzKOjqqqioiKIoqKqqqGhEUShoaqqoKAAAKCgqqqfn///n5+ZZp6e7ruenplmnZ3dd52dmWacnMwz" +
+   "nJyZZpubu+6bm5lmmpqqqpqamWaZmQdkmJiIIpiYmWaXl3fdl5eZZpaWZpmWlplmlZVVVZWVmWaUlEQRlJSZZpOT" +
+   "M8yTk5lmkpIiiJKSmWaRkRFEkZGZZpCQAACQkJlmj4///4+PiCKOju67jo6IIo2N3XeNjYgijIzMM4yMiCKLi7vu" +
+   "i4uIIoqKqqqKiogiiYmZZomJiCKIiAdkh4d33YeHiCKGhmaZhoaIIoWFVVWFhYgihIREEYSEiCKDgzPMg4OIIoKC" +
+   "IoiCgogigYERRIGBiCKAgAAAgICIIgNk9nfdA2T4d90DZPh33QNk+HfdA2T4d90DZPh33QNk+HfdA2T4A2L0B2QD" +
+   "ZPh33QNk+HfdA2T4d90DZPh33QNk+HfdA2T4d90DZPh33QNk+GaZA2T4ZpkDZPhmmQNk+GaZA2T4ZpkDZPhmmQNk" +
+   "+GaZA2T4ZpkDZPgDYvQHZANk+GaZA2T4ZpkDZPhmmQNk+GaZA2T4ZpkDZPhmmQNk+FVVA2T4VVUDZPhVVQNk+FVV" +
+   "A2T4VVUDZPhVVQNk+FVVA2T4VVUDZPhVVQNk+ANi9AdkA2T4VVUDZPhVVQNk+FVVA2T4VVUDZPhVVQNk+EQRA2T4" +
+   "RBEDZPhEEQNk+EQRA2T4RBEDZPhEEQNk+EQRA2T4RBEDZPhEEQNk+EQRA2T4A2L0B2QDZPhEEQNk+EQRA2T4RBED" +
+   "ZPhEEQNk+DPMA2T4M8wDZPgzzANk+DPMA2T4M8wDZPgzzANk+DPMA2T4M8wDZPgzzANk+DPMA2T4M8wDZPgDYvQH" +
+   "ZANk+DPMA2T4M8wDZPgzzANk+CKIA2T4IogDZPgiiANk+CKIA2T4IogDZPYiiANk+CKIA2T4IogDZPgiiANk+CKI" +
+   "A2T4IogDZPgiiANk+ANi9AdkA2T4IogDZPgiiANk+BFEA2T4EUQDZPgRRANk+BFEA2T4EUQDZPgRRANk+BFEA2T4" +
+   "EUQDZPgRRANk+BFEA2T4EUQDZPgRRANk+BFEA2T4A2L0B2QDZPgRRANk+AAAA2T4AAADZPgAAANk+AAAA2T4AAAD" +
+   "ZPgAAANk+AAAA2T4AAADZPgAAANk+AAAA2T4AAADZPgAAANk+AAAA2T4AAADZPgDYvQHZA==";
+let apple2e_video_rom: number[];
+function getApple2eVideoROM(): number[] {
+   if (!apple2e_video_rom) {
+      var rom = new lzgmini().decode(stringToByteArray(atob(APPLE2E_VIDEO_ROM_LZG)));
+      // reverse the low 7 bits of each row: ROM bit 0 is the leftmost pixel
+      for (var i = 0; i < rom.length; i++) {
+         var b = rom[i] & 0x7f, r = 0;
+         for (var k = 0; k < 7; k++)
+            if (b & (1 << k)) r |= 0x40 >> k;
+         rom[i] = r | (rom[i] & 0x80);
+      }
+      apple2e_video_rom = rom;
+   }
+   return apple2e_video_rom;
 }
 
 /*exported apple2_charset */
