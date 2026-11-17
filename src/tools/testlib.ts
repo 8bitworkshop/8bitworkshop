@@ -111,7 +111,9 @@ export async function compile(options: CompileOptions): Promise<CompileResult> {
 export async function compileFile(tool: string, platform: string, presetPath: string): Promise<CompileResult> {
   await initialize();
 
-  var code = fs.readFileSync(path.join(toolRoot(), 'presets', platform, presetPath), 'utf-8');
+  // presets are served from presets/<base platform>/ (see WebPresetsFileSystem), so
+  // a variant like 'apple2.enh' reads the same files as its parent
+  var code = fs.readFileSync(path.join(toolRoot(), 'presets', getBasePlatform(platform), presetPath), 'utf-8');
   return compile({
     tool: tool,
     platform: platform,

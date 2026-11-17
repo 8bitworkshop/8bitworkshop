@@ -1,6 +1,6 @@
 
 import { CodeAnalyzer } from "./analysis";
-import { disassemble6502 } from "./cpu/disasm6502";
+import { disassemble6502, disassemble65C02 } from "./cpu/disasm6502";
 import { disassembleZ80 } from "./cpu/disasmz80";
 import { Z80 } from "./cpu/ZilogZ80";
 import { AnimationTimer, ControllerPoller, EmuHalt, RasterVideo, drawCrosshair, dumpRAM } from "./emu";
@@ -1230,8 +1230,12 @@ export abstract class Base6502MachinePlatform<T extends Machine> extends BaseMac
   getToolForFilename(fn) { return getToolForFilename_6502(fn); }
   getDefaultExtensions() { return [".c", ".cpp", ".o64", ".acme", ".xa", ".ca65", ".dasm", ".ecs", ".wiz"]; }
 
+  /** True when the machine's CPU has the 65C02's extra opcodes (e.g. the Apple //e). */
+  cpu65c02 = false;
+
   disassemble(pc: number, read: (addr: number) => number): DisasmLine {
-    return disassemble6502(pc, read(pc), read(pc + 1), read(pc + 2));
+    var b0 = read(pc), b1 = read(pc + 1), b2 = read(pc + 2);
+    return this.cpu65c02 ? disassemble65C02(pc, b0, b1, b2) : disassemble6502(pc, b0, b1, b2);
   }
   getDebugCategories() {
     if (isDebuggable(this.machine))

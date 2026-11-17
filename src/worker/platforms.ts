@@ -235,6 +235,21 @@ export var PLATFORM_PARAMS = {
       libargs: ['apple2.lib'],
       acmeargs: ['-f', 'apple'],
     },
+    // Apple //e. Builds for the cc65 apple2enh target, but shares the apple2
+    // preset files and toolchain filesystem (see getBasePlatform).
+    'apple2.enh': {
+      arch: '6502',
+      define: ['__APPLE2__', '__APPLE2ENH__'],
+      cfgfile: 'apple2enh.cfg',
+      libargs: ['--lib-path', '/share/cc65/target/apple2enh/drv', 'apple2enh.lib'],
+      __CODE_RUN__: 16384,
+      code_start: 0x803,
+      rom_size: 0x9400 - 0x803,
+      data_start: 0x9400,
+      zp_start: 0x60,
+      load_header: 'dos33',
+      acmeargs: ['-f', 'apple'],
+    },
     'atari8-800xl.disk': {
       arch: '6502',
       define: ['__ATARI__'],

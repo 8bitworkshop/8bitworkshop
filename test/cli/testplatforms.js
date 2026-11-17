@@ -255,6 +255,24 @@ describe('Platform Replay', () => {
     assert.equal(platform.saveState().kbdlatch, 0x20); // strobe cleared
   });
 
+  // apple2.enh is the //e: 128K, 80-column, and a 65C02 CPU instead of the II+'s
+  // NMOS 6502. This ROM uses STZ, PHX/PLX and BRA, so it only runs correctly if
+  // the enhanced machine really got the 65C02 core.
+  it('Should run apple2.enh with a 65C02 CPU', async () => {
+    var platform = await testPlatform('apple2.enh', 'enh65c02.rom', 30);
+    assert.equal(platform.readAddress(0x600), 0x00); // STZ cleared it
+    assert.equal(platform.readAddress(0x601), 0x42); // BRA skipped LDA #$FF
+    assert.equal(platform.readAddress(0x602), 0x5a); // PHX/PLX round-trip
+  });
+
+  it('Should use the NMOS 6502 on a plain apple2', async () => {
+    var platform = await testPlatform('apple2', 'enh65c02.rom', 30);
+    // STZ is a NOP on NMOS, so $0600 keeps $AA; BRA is a NOP too, so the LDA #$FF
+    // fallthrough is executed and $0601 gets $FF instead of $42
+    assert.equal(platform.readAddress(0x600), 0xaa);
+    assert.equal(platform.readAddress(0x601), 0xff);
+  });
+
   it('Should run > 60 secs', async function () {
     // 61 seconds of emulated time: enough to fill the recorder (3000 frames)
     // and wrap it, which is what the replay bookkeeping is about. A loaded

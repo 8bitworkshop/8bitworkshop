@@ -1,7 +1,15 @@
 
 import { hex } from "../util";
 
-export var OPS_6502 = [
+/// One entry of a 6502-family opcode table: mnemonic, addressing mode (a string
+/// with `aa`/`AAAA`/`branch` placeholders), byte length, illegal-on-NMOS flag,
+/// base cycles, extra cycles, writes, branch and flags-modified mask.
+export interface Op6502 {
+  mn: string; am: string; nb: number; il: number;
+  c1: number; c2: number; nw: number; br: number; mod: string;
+}
+
+export var OPS_6502: Op6502[] = [
   {mn:"BRK",am:"",nb:1,il:0,c1:7,c2:0,nw:3,br:1,mod:"SI"}, // 0
   {mn:"ORA",am:"(aa,x)",nb:2,il:0,c1:6,c2:0,nw:0,br:0,mod:"AZN"}, // 1
   {mn:"KIL",am:"",nb:1,il:2,c1:3,c2:0,nw:0,br:1,mod:""}, // 2
@@ -260,9 +268,59 @@ export var OPS_6502 = [
   {mn:"ISB",am:"AAAA,x",nb:3,il:1,c1:7,c2:0,nw:2,br:0,mod:"ACZVN"}, // ff
 ];
 
-export function disassemble6502(pc:number, b0:number, b1:number, b2:number) : {line:string, nbytes:number, isaddr:boolean, iscall?:boolean} {
+/// 65C02 entries that differ from the NMOS table above. Kept to the subset the
+/// MOS65C02 core actually implements (the 65SC02 one: no Rockwell BBR/BBS/RMB/
+/// SMB, no WDC WAI/STP), so disassembly never claims an opcode the core doesn't
+/// execute. The unofficial NMOS opcodes the core still treats as themselves
+/// (uSLO, uANC, ...) are left alone here for the same reason.
+const OPS_65C02_PATCH: {[opcode:number]: Partial<Op6502>} = {
+  // new "(zp)" addressing mode (indirect, no index, no page-cross penalty)
+  0x12:{mn:"ORA",am:"(aa)",nb:2,il:0,c1:5,c2:0,nw:0,br:0,mod:"AZN"},
+  0x32:{mn:"AND",am:"(aa)",nb:2,il:0,c1:5,c2:0,nw:0,br:0,mod:"AZN"},
+  0x52:{mn:"EOR",am:"(aa)",nb:2,il:0,c1:5,c2:0,nw:0,br:0,mod:"AZN"},
+  0x72:{mn:"ADC",am:"(aa)",nb:2,il:0,c1:5,c2:0,nw:0,br:0,mod:"ACZVN"},
+  0x92:{mn:"STA",am:"(aa)",nb:2,il:0,c1:5,c2:0,nw:1,br:0,mod:""},
+  0xb2:{mn:"LDA",am:"(aa)",nb:2,il:0,c1:5,c2:0,nw:0,br:0,mod:"AZN"},
+  0xd2:{mn:"CMP",am:"(aa)",nb:2,il:0,c1:5,c2:0,nw:0,br:0,mod:"AZN"},
+  0xf2:{mn:"SBC",am:"(aa)",nb:2,il:0,c1:5,c2:0,nw:0,br:0,mod:"ACZVN"},
+  // TSB / TRB
+  0x04:{mn:"TSB",am:"aa",nb:2,il:0,c1:5,c2:0,nw:2,br:0,mod:"Z"},
+  0x0c:{mn:"TSB",am:"AAAA",nb:3,il:0,c1:6,c2:0,nw:2,br:0,mod:"Z"},
+  0x14:{mn:"TRB",am:"aa",nb:2,il:0,c1:5,c2:0,nw:2,br:0,mod:"Z"},
+  0x1c:{mn:"TRB",am:"AAAA",nb:3,il:0,c1:6,c2:0,nw:2,br:0,mod:"Z"},
+  // BIT gains immediate (Z only) and indexed addressing
+  0x89:{mn:"BIT",am:"#aa",nb:2,il:0,c1:2,c2:0,nw:0,br:0,mod:"Z"},
+  0x34:{mn:"BIT",am:"aa,x",nb:2,il:0,c1:4,c2:0,nw:0,br:0,mod:"ZVN"},
+  0x3c:{mn:"BIT",am:"AAAA,x",nb:3,il:0,c1:4,c2:1,nw:0,br:0,mod:"ZVN"},
+  // STZ
+  0x64:{mn:"STZ",am:"aa",nb:2,il:0,c1:3,c2:0,nw:1,br:0,mod:""},
+  0x74:{mn:"STZ",am:"aa,x",nb:2,il:0,c1:4,c2:0,nw:1,br:0,mod:""},
+  0x9c:{mn:"STZ",am:"AAAA",nb:3,il:0,c1:4,c2:0,nw:1,br:0,mod:""},
+  0x9e:{mn:"STZ",am:"AAAA,x",nb:3,il:0,c1:5,c2:0,nw:1,br:0,mod:""},
+  // stack / accumulator ops
+  0x5a:{mn:"PHY",am:"",nb:1,il:0,c1:3,c2:0,nw:1,br:0,mod:"S"},
+  0x7a:{mn:"PLY",am:"",nb:1,il:0,c1:4,c2:0,nw:0,br:0,mod:"SZN"},
+  0xda:{mn:"PHX",am:"",nb:1,il:0,c1:3,c2:0,nw:1,br:0,mod:"S"},
+  0xfa:{mn:"PLX",am:"",nb:1,il:0,c1:4,c2:0,nw:0,br:0,mod:"SZN"},
+  0x1a:{mn:"INC",am:"",nb:1,il:0,c1:2,c2:0,nw:0,br:0,mod:"ZN"},
+  0x3a:{mn:"DEC",am:"",nb:1,il:0,c1:2,c2:0,nw:0,br:0,mod:"ZN"},
+  // branch always, indexed indirect jump, fixed indirect jump (+1 cycle)
+  0x80:{mn:"BRA",am:"branch",nb:2,il:0,c1:3,c2:1,nw:0,br:1,mod:""},
+  0x7c:{mn:"JMP",am:"(AAAA,x)",nb:3,il:0,c1:6,c2:0,nw:0,br:1,mod:""},
+  0x6c:{mn:"JMP",am:"(AAAA)",nb:3,il:0,c1:6,c2:0,nw:0,br:1,mod:""},
+  // former KIL slots are 2-byte NOPs (no 65C02 opcode halts the CPU)
+  0x02:{mn:"NOP",am:"#aa",nb:2,il:0,c1:2,c2:0,nw:0,br:0,mod:""},
+  0x22:{mn:"NOP",am:"#aa",nb:2,il:0,c1:2,c2:0,nw:0,br:0,mod:""},
+  0x42:{mn:"NOP",am:"#aa",nb:2,il:0,c1:2,c2:0,nw:0,br:0,mod:""},
+  0x62:{mn:"NOP",am:"#aa",nb:2,il:0,c1:2,c2:0,nw:0,br:0,mod:""},
+};
 
-  var op = OPS_6502[b0];
+/// The NMOS table with the 65C02's changes applied, for machines with a 65C02.
+export var OPS_65C02: Op6502[] = OPS_6502.map((op, i) => ({ ...op, ...(OPS_65C02_PATCH[i] || {}) }));
+
+export function disassemble6502(pc:number, b0:number, b1:number, b2:number, ops:Op6502[] = OPS_6502): {line:string, nbytes:number, isaddr:boolean, iscall?:boolean} {
+
+  var op = ops[b0];
   if (op == null) return {line:"???", nbytes:1, isaddr:false};
   var s = op.mn;
   var am = op.am;
@@ -280,3 +338,9 @@ export function disassemble6502(pc:number, b0:number, b1:number, b2:number) : {l
   }
   return {line:op.mn + " " + am, nbytes:op.nb, isaddr:isaddr, iscall:op.mn=="JSR"};
 };
+
+/// Disassemble one 65C02 instruction (for machines with a 65C02 such as the
+/// Apple //e); `b0`/`b1`/`b2` are the bytes at, and after, `pc`.
+export function disassemble65C02(pc:number, b0:number, b1:number, b2:number) {
+  return disassemble6502(pc, b0, b1, b2, OPS_65C02);
+}

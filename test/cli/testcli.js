@@ -364,6 +364,18 @@ describe('8bws CLI', function () {
             assert.ok(/PC=\$[0-9A-F]{4}/.test(out), out);
             assert.ok(/\$[0-9A-F]{4}\s+[0-9A-F]{2}/.test(out), out);
         });
+        it('should disassemble 65C02 opcodes on apple2.enh', function () {
+            var out = cli('run', '--platform', 'apple2.enh', '-e', 'pc 12', 'test/roms/apple2.enh/enh65c02.rom');
+            assert.ok(/STZ \$0600/.test(out), out);
+            assert.ok(/^\s+\$080D\s+DA\s+PHX$/m.test(out), out);
+            assert.ok(/BRA \$0817/.test(out), out);
+        });
+        it('should not decode 65C02 opcodes on a plain apple2', function () {
+            var out = cli('run', '--platform', 'apple2', '-e', 'pc 12', 'test/roms/apple2/enh65c02.rom');
+            // $9C is an unofficial NMOS opcode (SHY), and $DA/$80 are NOPs there
+            assert.ok(/SHY \$0600,x/.test(out), out);
+            assert.ok(!/STZ|PHX|BRA/.test(out), out);
+        });
         it('should disassemble a z80 platform', function () {
             var out = cli('run', '--platform', 'vicdual', '-e', 'run 20; pc 2', 'test/roms/vicdual/snake1.c.rom');
             assert.ok(/PC=\$[0-9A-F]{4}/.test(out), out);

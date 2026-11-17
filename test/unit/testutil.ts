@@ -4,8 +4,9 @@ import { describe } from "mocha";
 import { EmuHalt } from "../../src/common/emu"
 import { lzgmini, isProbablyBinary, hex, formatClocks, encodeBase64Url, decodeBase64Url } from "../../src/common/util";
 import { Tokenizer, TokenType } from "../../src/common/tokenizer";
-import { OPS_6502 } from "../../src/common/cpu/disasm6502";
+import { OPS_6502, OPS_65C02 } from "../../src/common/cpu/disasm6502";
 import { MOS6502 } from "../../src/common/cpu/MOS6502";
+import { MOS65C02 } from "../../src/common/cpu/MOS65C02";
 
 var NES_CONIO_ROM_LZG = [
   76, 90, 71, 0, 0, 160, 16, 0, 0, 11, 158, 107, 131, 223, 83, 1, 9, 17, 21, 22, 78, 69, 83, 26, 2, 1, 3, 0, 22, 6, 120, 216,
@@ -244,6 +245,23 @@ describe('CPU metadata', function () {
     let meta2 = cpu.getOpcodeMetadata(i);
     if (meta1.il > 0) continue;
 //    assert.strictEqual(meta1.mn, meta2.mnenomic, `mnemonic ${hex(i)}: ${meta1.mn} != ${meta2.mnenomic}`);
+    assert.strictEqual(meta1.nb, meta2.insnlength, `insnLength ${hex(i)}: ${meta1.nb} != ${meta2.insnlength}`);
+    assert.strictEqual(meta1.c1, meta2.minCycles, `minCycles ${hex(i)}: ${meta1.c1} != ${meta2.minCycles}`);
+    assert.strictEqual(meta1.c1+meta1.c2, meta2.maxCycles, `maxCycles ${hex(i)}: ${meta1.c1+meta1.c2} != ${meta2.maxCycles}`);
+  }
+});
+
+// The 65C02 disassembly table must describe exactly what the 65C02 core executes:
+// every opcode the core patches has to agree on length and cycles, or the IDE's
+// code view steps through the wrong bytes. Unofficial NMOS opcodes (`il`) are
+// left alone by both, so they're skipped.
+describe('CPU metadata 65C02', function () {
+  let cpu = new MOS65C02();
+  for (let i=0; i<256; i++) {
+    let meta1 = OPS_65C02[i];
+    if (meta1.il > 0) continue;
+    let meta2 = cpu.getOpcodeMetadata(i);
+    assert.strictEqual(meta1.mn, meta2.mnenomic, `mnemonic ${hex(i)}: ${meta1.mn} != ${meta2.mnenomic}`);
     assert.strictEqual(meta1.nb, meta2.insnlength, `insnLength ${hex(i)}: ${meta1.nb} != ${meta2.insnlength}`);
     assert.strictEqual(meta1.c1, meta2.minCycles, `minCycles ${hex(i)}: ${meta1.c1} != ${meta2.minCycles}`);
     assert.strictEqual(meta1.c1+meta1.c2, meta2.maxCycles, `maxCycles ${hex(i)}: ${meta1.c1+meta1.c2} != ${meta2.maxCycles}`);

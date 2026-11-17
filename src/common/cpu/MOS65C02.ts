@@ -54,7 +54,7 @@ export function patch65C02(ctx: MOS6502PatchContext) {
     set(0x3a, "DEC", ctx.DEC_ACC(), 2, 0, 1);
 
     // Branch always / indexed indirect jump / fixed indirect jump
-    set(0x80, "BRA", ctx.BRA(), 2, 2, 2);
+    set(0x80, "BRA", ctx.BRA(), 3, 1, 2); // always taken: 3 cycles, +1 on page cross
     set(0x7c, "JMP", ctx.JMP_ABS_X(), 6, 0, 3);
     set(0x6c, "JMP", ctx.JMP_IND_CMOS(), 6, 0, 3); // fixes NMOS page-wrap bug, +1 cycle
 

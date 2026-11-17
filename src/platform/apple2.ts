@@ -37,6 +37,9 @@ const APPLE2_PRESETS: Preset[] = [
 
 class Apple2MAMEPlatform extends BaseMAME6502Platform implements Platform {
 
+  // MAME's apple2e driver emulates a //e, so it has a 65C02
+  cpu65c02 = true;
+
   start() {
     this.startModule(this.mainElement, {
       jsfile: 'mame8bitpc.js',
@@ -81,7 +84,8 @@ class NewApple2Platform extends Base6502MachinePlatform<AppleII> implements Plat
   getPresets() { return APPLE2_PRESETS; }
   getDefaultExtensions() { return [...super.getDefaultExtensions(), ".lnk"]; }
   readAddress(a) { return this.machine.readConst(a); }
-  // TODO loadBIOS(bios)	{ this.machine.loadBIOS(a); }
+  // A real 16K //e ROM can be dropped in as "apple2.enh.rom"; the built-in
+  // Apple2Go ROM keeps booting the same way when there isn't one.
   getMemoryMap = function () {
     return {
       main: [
@@ -114,5 +118,40 @@ class NewApple2Platform extends Base6502MachinePlatform<AppleII> implements Plat
   */
 }
 
+/// Apple //e (enhanced): 128K, 80-column text, double hi-res.
+///
+/// Named `apple2.enh` so `getBasePlatform()` resolves it to `apple2`: the
+/// presets, toolchain filesystem and tool selection are shared with the II+
+/// platform, the same way `gb.color` shares `presets/gb/`.
+class NewApple2EnhancedPlatform extends NewApple2Platform implements Platform {
+  newMachine() { return new AppleII(true); }
+  // the //e has a 65C02, so disassemble STZ/BRA/PHX/... instead of NOPs and KILs
+  cpu65c02 = true;
+  // and take instruction lengths/cycles from its (patched) table, not the NMOS copy
+  getOpcodeMetadata = (opcode: number, address: number) =>
+    this.machine ? this.machine.cpu.getOpcodeMetadata(opcode) : getOpcodeMetadata_6502(opcode, address);
+  getMemoryMap = function () {
+    return {
+      main: [
+        { name: 'Zero Page RAM', start: 0x0, size: 0x100, type: 'ram' },
+        { name: 'Line Input RAM', start: 0x200, size: 0x100, type: 'ram' },
+        { name: 'RAM', start: 0x300, size: 0xc0, type: 'ram' },
+        { name: 'DOS Vectors', start: 0x3c0, size: 0x40, type: 'ram' },
+        { name: 'Text/Lores Page 1', start: 0x400, size: 0x400, type: 'ram' },
+        { name: 'RAM', start: 0x800, size: 0x1800, type: 'ram' },
+        { name: 'Hires Page 1', start: 0x2000, size: 0x2000, type: 'ram' },
+        { name: 'Hires Page 2', start: 0x4000, size: 0x2000, type: 'ram' },
+        { name: 'RAM', start: 0x6000, size: 0x6000, type: 'ram' },
+        { name: 'I/O', start: 0xc000, size: 0x1000, type: 'io' },
+        { name: 'ROM', start: 0xd000, size: 0x3000, type: 'rom' },
+      ],
+      aux: [
+        { name: 'Aux RAM (RAMRD/RAMWRT)', start: 0x200, size: 0xbe00, type: 'ram' },
+      ]
+    }
+  };
+}
+
 PLATFORMS['apple2.mame'] = Apple2MAMEPlatform;
 PLATFORMS['apple2'] = NewApple2Platform;
+PLATFORMS['apple2.enh'] = NewApple2EnhancedPlatform;

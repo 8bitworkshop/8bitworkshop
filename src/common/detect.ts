@@ -64,7 +64,7 @@ const SYSTEM_HEADERS: { [header: string]: string[] } = {
   'vic20.h': ['vic20'],
   'cbm.h': ['c64', 'vic20'],
   'apple2.h': ['apple2'],
-  'apple2enh.h': ['apple2'],
+  'apple2enh.h': ['apple2.enh'],
   'atari.h': ['atari8-800'],
   'atari5200.h': ['atari8-5200'],
   'atari7800.h': ['atari7800'],
@@ -80,7 +80,7 @@ const SYSTEM_HEADERS: { [header: string]: string[] } = {
 
 // cc65 targets (cl65 -t / --target) and the platforms they build for
 const CC65_TARGETS: { [target: string]: string } = {
-  'nes': 'nes', 'c64': 'c64', 'vic20': 'vic20', 'apple2': 'apple2', 'apple2enh': 'apple2',
+  'nes': 'nes', 'c64': 'c64', 'vic20': 'vic20', 'apple2': 'apple2', 'apple2enh': 'apple2.enh',
   'atari': 'atari8-800', 'atari5200': 'atari8-5200', 'atari7800': 'atari7800',
   'atari2600': 'vcs', 'pce': 'pce',
 };

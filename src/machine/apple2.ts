@@ -1,4 +1,5 @@
 import { MOS6502, MOS6502State } from "../common/cpu/MOS6502";
+import { MOS65C02 } from "../common/cpu/MOS65C02";
 import { Bus, BasicScanlineMachine, SavesState, AcceptsBIOS, AcceptsPaddleInput } from "../common/devices";
 import { KeyFlags } from "../common/emu"; // TODO
 import { hex, lzgmini, stringToByteArray, RGBA, printFlags, arrayCompare } from "../common/util";
@@ -7,9 +8,22 @@ import { VIA6522, VIA6522Host } from "./chips/via6522";
 
 interface AppleIIStateBase {
    ram: Uint8Array<ArrayBuffer>;
+   auxram?: Uint8Array<ArrayBuffer>; // 64K auxiliary RAM (//e only)
+   iie?: AppleIIEnhancedSwitches;
    soundstate: number;
    auxRAMselected, writeinhibit: boolean;
    auxRAMbank: number;
+}
+
+/** The //e-only memory/video soft switches ($C000-$C00F). */
+interface AppleIIEnhancedSwitches {
+   ramrd: boolean;      // read $0200-$BFFF from aux RAM
+   ramwrt: boolean;     // write $0200-$BFFF to aux RAM
+   store80: boolean;    // 80STORE: PAGE2 selects main/aux for text/HGR page
+   col80: boolean;      // 80COL: display 80 columns from main+aux
+   altcharset: boolean; // ALTCHARSET: alternate character set (not yet rendered)
+   intcxrom: boolean;   // INTCXROM: internal ROM at $C100-$CFFF
+   an3?: boolean;       // annunciator 3 ($C05E clears, $C05F sets); clear = double hi-res
 }
 
 interface AppleIIControlsState {
@@ -50,10 +64,25 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
    HDR_SIZE = 0;
 
    ram = new Uint8Array(0x13000); // 64K + 16K LC RAM - 4K hardware + 12K ROM
+   // Apple //e: full 64K auxiliary RAM and the //e-only soft switches
+   enhanced = false;
+   auxRAM: Uint8Array;
+   ramrd = false;
+   ramwrt = false;
+   store80 = false;
+   col80 = false;
+   altcharset = false;
+   intcxrom = true;
+   // AN3 doubles as the //e's DHIRES switch: $C05E clears it (double hi-res on),
+   // $C05F sets it. It starts set, so 80COL+HIRES alone is plain hi-res.
+   an3 = true;
    bios: Uint8Array;
-   cpu = new MOS6502();
+   // The //e has a 65C02, the II+ does not. This field is initialised here
+   // because other fields/factories run first; the constructor swaps in a
+   // MOS65C02 when `enhanced` is set.
+   cpu: MOS6502 = new MOS6502();
    grdirty = new Array(0xc000 >> 7);
-   grparams = { dirty: this.grdirty, grswitch: GR_TXMODE, mem: this.ram };
+   grparams = { dirty: this.grdirty, grswitch: GR_TXMODE, mem: this.ram, auxmem: null as Uint8Array, col80: false, an3: true };
    ap2disp;
    kbdlatch = 0;
    soundstate = 0;
@@ -125,15 +154,28 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
       write: (a, v) => { }
    };
 
-   constructor() {
+   constructor(enhanced: boolean = false) {
       super();
-      this.loadBIOS(new lzgmini().decode(stringToByteArray(atob(APPLEIIGO_LZG))));
+      if (enhanced) {
+         this.enhanced = true;
+         this.auxRAM = new Uint8Array(0x10000);
+         this.grparams.auxmem = this.auxRAM;
+         // 80 columns is 560 pixels; 40-column modes are drawn at 2x
+         this.canvasWidth = 560;
+         // 560x192 is the same 4:3 tube as the 280x192 II+ raster, with half-as-
+         // wide pixels. Without this the canvas would keep its 560/192 shape and
+         // the picture would look stretched horizontally.
+         this.aspectRatio = 4 / 3;
+         // cc65's apple2enh target and the real //e ROM use 65C02 opcodes
+         // (STZ, BRA, PHX/PLX, INC A, (zp), fixed JMP ($xxFF)).
+         this.cpu = new MOS65C02();
+      }
+      this.loadBIOS(new lzgmini().decode(stringToByteArray(atob(APPLEIIGO_LZG))), true);
       this.connectCPUMemoryBus(this);
       // This line is inappropriate for real ROMs, but was there for
-      // the APPLE][GO ROM, so keeping it only in the constructor, for
-      // that special case (in case it really is important for this
-      // address to be an RTS).
-      this.bios[0xD39A - (0x10000 - this.bios.length)] = 0x60;  // $d39a = RTS
+      // the APPLE][GO ROM, so keeping it only when the built-in ROM is
+      // used (in case it really is important for this address to be an RTS).
+      if (this.bios.length == 0x3000) this.bios[0xD39A - 0xD000] = 0x60;  // $d39a = RTS
       this.mb = new Mockingboard(this.cpuFrequency);
       this.slots[4] = this.mb;
    }
@@ -142,6 +184,12 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
       return {
          c: this.cpu.saveState(),
          ram: this.ram.slice(),
+         auxram: this.auxRAM ? this.auxRAM.slice() : undefined,
+         iie: this.enhanced ? {
+            ramrd: this.ramrd, ramwrt: this.ramwrt, store80: this.store80,
+            col80: this.col80, altcharset: this.altcharset, intcxrom: this.intcxrom,
+            an3: this.an3
+         } : undefined,
          kbdlatch: this.kbdlatch,
          soundstate: this.soundstate,
          grswitch: this.grparams.grswitch,
@@ -157,9 +205,21 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
    loadState(s: AppleIIState) {
       this.cpu.loadState(s.c);
       this.ram.set(s.ram);
+      if (s.auxram && this.auxRAM) this.auxRAM.set(s.auxram);
+      if (s.iie) {
+         this.ramrd = s.iie.ramrd;
+         this.ramwrt = s.iie.ramwrt;
+         this.store80 = s.iie.store80;
+         this.col80 = s.iie.col80;
+         this.altcharset = s.iie.altcharset;
+         this.intcxrom = s.iie.intcxrom;
+         this.an3 = s.iie.an3 !== false; // states saved before AN3 existed
+      }
+      this.grparams.an3 = this.an3;
       this.kbdlatch = s.kbdlatch;
       this.soundstate = s.soundstate;
       this.grparams.grswitch = s.grswitch;
+      this.grparams.col80 = this.col80;
       this.auxRAMselected = s.auxRAMselected;
       this.auxRAMbank = s.auxRAMbank;
       this.writeinhibit = s.writeinhibit;
@@ -169,7 +229,7 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
             this.slots[i]['loadState'](s.slots[i]);
       this.paddleValues = s.paddleValues.slice();
       this.paddleButtons = s.paddleButtons.slice();
-      this.ap2disp.invalidate(); // repaint entire screen
+      if (this.ap2disp) this.ap2disp.invalidate(); // repaint entire screen
    }
    saveControlsState(): AppleIIControlsState {
       return { inputs: null, kbdlatch: this.kbdlatch };
@@ -178,8 +238,8 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
       this.kbdlatch = s.kbdlatch;
    }
    loadBIOS(data, title?) {
-      if (data.length != 0x3000) {
-         console.log(`apple2 loadBIOS !!!WARNING!!!: BIOS wants length 0x3000, but BIOS '${title}' has length 0x${data.length.toString(16)}`);
+      if (data.length != 0x3000 && data.length != 0x4000) {
+         console.log(`apple2 loadBIOS !!!WARNING!!!: BIOS wants length 0x3000 (//+) or 0x4000 (//e), but BIOS '${title}' has length 0x${data.length.toString(16)}`);
          console.log("will load BIOS to end of memory anyway...");
       }
       this.bios = Uint8Array.from(data);
@@ -230,6 +290,15 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
       this.auxRAMselected = false;
       this.auxRAMbank = 1;
       this.writeinhibit = true;
+      this.ramrd = false;
+      this.ramwrt = false;
+      this.store80 = false;
+      this.col80 = false;
+      this.altcharset = false;
+      this.intcxrom = true;
+      this.an3 = true;
+      this.grparams.col80 = false;
+      this.grparams.an3 = true;
       this.ram.fill(0, 0x300, 0x400); // Clear soft-reset vector
       this.mb && this.mb.reset();
       // (force hard reset)
@@ -248,9 +317,33 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
          if ((this.cpu.getPC() >> 8) < 0xc6) break;
       }
    }
+   /** True when a 16K //e ROM is loaded, covering $C000-$FFFF (incl. slot ROM). */
+   hasInternalROM(): boolean {
+      return this.enhanced && this.bios != null && this.bios.length >= 0x4000;
+   }
+   readInternalROM(address: number): number {
+      return this.bios[address - (0x10000 - this.bios.length)] | 0;
+   }
+   /** Which RAM bank ($0200-$BFFF) this address reads from. */
+   readBank(address: number): Uint8Array {
+      return this.auxBankFor(address, this.ramrd) ? this.auxRAM : this.ram;
+   }
+   /** Which RAM bank ($0200-$BFFF) this address writes to. */
+   writeBank(address: number): Uint8Array {
+      return this.auxBankFor(address, this.ramwrt) ? this.auxRAM : this.ram;
+   }
+   auxBankFor(address: number, ramswitch: boolean): boolean {
+      // the zero page and stack are always in main RAM on the //e
+      if (address < 0x200) return false;
+      // with 80STORE on, PAGE2 (not RAMRD/RAMWRT) picks the bank for the
+      // text and hi-res pages
+      if (this.store80 && ((address >= 0x400 && address < 0x800) || (address >= 0x2000 && address < 0x4000)))
+         return (this.grparams.grswitch & GR_PAGE1) != 0;
+      return ramswitch;
+   }
    readConst(address: number): number {
       if (address < 0xc000) {
-         return this.ram[address];
+         return (this.auxRAM ? this.readBank(address) : this.ram)[address];
       } else if (address >= 0xd000) {
          if (!this.auxRAMselected)
             return this.bios[address - (0x10000 - this.bios.length)];
@@ -260,7 +353,15 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
             return this.ram[address + this.bank2rdoffset];
       } else if (address >= 0xc100 && address < 0xc800) {
          var slot = (address >> 8) & 7;
-         return (this.slots[slot] && this.slots[slot].readConst(address & 0xff)) | 0;
+         var dev = this.slots[slot];
+         // a slot device (disk controller, Mockingboard) wins, so the fake
+         // drive can boot even when internal ROM is selected
+         if (dev) return dev.readConst(address & 0xff) | 0;
+         if (this.hasInternalROM()) return this.readInternalROM(address);
+         return 0;
+      } else if (address >= 0xc800 && address < 0xd000) {
+         if (this.hasInternalROM()) return this.readInternalROM(address);
+         return 0;
       } else {
          return 0;
       }
@@ -274,6 +375,10 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
          var slot = (address >> 4) & 0x0f;
          switch (slot) {
             case 0: // $C00x
+               // $C000 is the keyboard; the //e's 80STORE/RAMRD/RAMWRT/80COL/
+               // ALTCHARSET switches here are write-only (reads of the other
+               // $C00x addresses float).
+               if (this.enhanced && address != 0xc000) return this.floatbus() | 0x80;
                return this.kbdlatch;
             case 1: // $C01x
                this.kbdlatch &= 0x7f;
@@ -288,6 +393,10 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
                      this.grparams.grswitch |= 1 << ((address >> 1) & 0x07);
                   else
                      this.grparams.grswitch &= ~(1 << ((address >> 1) & 0x07));
+               } else if (this.enhanced && (address & 0x0e) == 0x0e) {
+                  // $C05E/$C05F: AN3 off/on, which is also DHIRES on/off
+                  this.an3 = (address & 1) != 0;
+                  this.grparams.an3 = this.an3;
                }
                break;
             case 6: // $C06x
@@ -335,18 +444,47 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
          }
       } else if (address >= 0xc100 && address < 0xc800) {
          var slot = (address >> 8) & 7;
-         return (this.slots[slot] && this.slots[slot].readROM(address & 0xff)) | 0;
+         var dev = this.slots[slot];
+         if (dev) return dev.readROM(address & 0xff) | 0;
+         if (this.hasInternalROM()) return this.readInternalROM(address);
+         return 0;
       }
       return this.floatbus();
+   }
+   /**
+    * The //e soft switches at $C000-$C00F. These are write-only: a program
+    * sets them with a store (or any write cycle), and reading the address
+    * gives the keyboard ($C000) or the floating bus.
+    */
+   writeEnhancedSwitch(address: number): void {
+      switch (address) {
+         case 0xc000: this.store80 = false; break;    // 80STORE off
+         case 0xc001: this.store80 = true; break;     // 80STORE on
+         case 0xc002: this.ramrd = false; break;      // read main RAM
+         case 0xc003: this.ramrd = true; break;       // read aux RAM
+         case 0xc004: this.ramwrt = false; break;     // write main RAM
+         case 0xc005: this.ramwrt = true; break;      // write aux RAM
+         case 0xc006: this.intcxrom = false; break;   // slot ROM
+         case 0xc007: this.intcxrom = true; break;    // internal ROM
+         case 0xc00c: this.col80 = false; break;      // 40 columns
+         case 0xc00d: this.col80 = true; break;       // 80 columns
+         case 0xc00e: this.altcharset = false; break; // normal charset
+         case 0xc00f: this.altcharset = true; break;  // alternate charset
+      }
+      this.grparams.col80 = this.col80;
    }
    write(address: number, val: number): void {
       address &= 0xffff;
       val &= 0xff;
       if (address < 0xc000) {
-         this.ram[address] = val;
+         if (this.auxRAM) this.writeBank(address)[address] = val;
+         else this.ram[address] = val;
          this.grdirty[address >> 7] = 1;
       } else if (address < 0xc090) {
-         this.read(address); // strobe address, discard result
+         if (this.enhanced && address < 0xc010)
+            this.writeEnhancedSwitch(address);
+         else
+            this.read(address); // strobe address, discard result
       } else if (address < 0xc100) {
          var slot = (address >> 4) & 0x0f;
          this.slots[slot - 8] && this.slots[slot - 8].write(address & 0xf, val);
@@ -369,6 +507,9 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
    // http://rich12345.tripod.com/aiivideo/softalk.html
    // https://github.com/MiSTer-devel/Apple-II_MiSTer/blob/master/rtl/timing_generator.vhd
    floatbus(): number {
+      // no video scanner hooked up yet (e.g. saveState() before the platform
+      // starts, or a headless machine)
+      if (!this.ap2disp) return 0xff;
       var fcyc = this.frameCycles;
       var yline = Math.floor(fcyc / 65);
       var xcyc = Math.floor(fcyc % 65);
@@ -378,7 +519,7 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
 
    connectVideo(pixels: Uint32Array) {
       super.connectVideo(pixels);
-      this.ap2disp = this.pixels && new Apple2Display(this.pixels, this.grparams);
+      this.ap2disp = this.pixels && new Apple2Display(this.pixels, this.grparams, this.canvasWidth);
    }
    startScanline() {
    }
@@ -560,6 +701,12 @@ export class AppleII extends BasicScanlineMachine implements AcceptsBIOS, Accept
          case 'I/O': return "AUX RAM Bank:   " + state.auxRAMbank +
             "\nAUX RAM Select: " + state.auxRAMselected +
             "\nAUX RAM Write:  " + !state.writeinhibit +
+            (this.enhanced ?
+               "\nRAMRD/RAMWRT:   " + (state.iie && state.iie.ramrd ? "aux" : "main") + "/" +
+               (state.iie && state.iie.ramwrt ? "aux" : "main") +
+               "\n80STORE/80COL:  " + (state.iie && state.iie.store80) + "/" + (state.iie && state.iie.col80) +
+               "\nALTCHARSET:     " + (state.iie && state.iie.altcharset) +
+               "\nDHIRES (AN3):   " + (state.iie && state.iie.an3 === false ? "on" : "off") : "") +
             "\n\nGR Switches: " + printFlags(state.grswitch, ["Graphics", "Mixed", "Page2", "Hires"], false) +
             "\n";
          case 'Disk': return (this.slots[6] && this.slots[6]['toLongString'] && this.slots[6]['toLongString']()) || "\n";
@@ -572,16 +719,22 @@ const GR_MIXMODE = 2;
 const GR_PAGE1 = 4;
 const GR_HIRES = 8;
 
-type AppleGRParams = { dirty: boolean[], grswitch: number, mem: Uint8Array };
+type AppleGRParams = {
+   dirty: boolean[], grswitch: number, mem: Uint8Array,
+   // Apple //e video: 64K auxiliary RAM and the 80COL switch
+   auxmem?: Uint8Array, col80?: boolean, an3?: boolean
+};
 
-var Apple2Display = function (pixels: Uint32Array, apple: AppleGRParams) {
-   var XSIZE = 280;
+var Apple2Display = function (pixels: Uint32Array, apple: AppleGRParams, width: number = 280) {
+   var XSIZE = width;
    var YSIZE = 192;
    var PIXELON = 0xffffffff;
    var PIXELOFF = 0xff000000;
+   // 40-column modes are stretched 2x on the //e's 560-pixel raster
+   var HSCALE = Math.max(1, Math.floor(XSIZE / 280));
 
    var oldgrmode = -1;
-   var textbuf = new Array(40 * 24);
+   var textbuf = new Array(80 * 24);
 
    const flashInterval = 250;
 
@@ -706,53 +859,58 @@ var Apple2Display = function (pixels: Uint32Array, apple: AppleGRParams) {
       }
    }
 
-   function drawLoresChar(x, y, b) {
-      var i, base, adr, c;
-      base = (y << 3) * XSIZE + x * 7; //(x<<2) + (x<<1) + x
-      c = loresColor[b & 0x0f];
-      for (i = 0; i < 4; i++) {
-         pixels[base] =
-            pixels[base + 1] =
-            pixels[base + 2] =
-            pixels[base + 3] =
-            pixels[base + 4] =
-            pixels[base + 5] =
-            pixels[base + 6] = c;
+   function fillPixels(base, n, c) {
+      for (var i = 0; i < n; i++) pixels[base + i] = c;
+   }
+
+   function drawLoresChar(x, y, b, scale) {
+      var base = (y << 3) * XSIZE + x * 7 * scale;
+      var w = 7 * scale;
+      var c = loresColor[b & 0x0f];
+      for (var i = 0; i < 4; i++) {
+         fillPixels(base, w, c);
          base += XSIZE;
       }
       c = loresColor[b >> 4];
-      for (i = 0; i < 4; i++) {
-         pixels[base] =
-            pixels[base + 1] =
-            pixels[base + 2] =
-            pixels[base + 3] =
-            pixels[base + 4] =
-            pixels[base + 5] =
-            pixels[base + 6] = c;
+      for (var i = 0; i < 4; i++) {
+         fillPixels(base, w, c);
          base += XSIZE;
       }
    }
 
-   function drawTextChar(x, y, b, invert) {
-      var base = (y << 3) * XSIZE + x * 7; // (x<<2) + (x<<1) + x
-      var on, off;
-      if (invert) {
-         on = PIXELOFF;
-         off = PIXELON;
-      } else {
-         on = PIXELON;
-         off = PIXELOFF;
-      }
+   /** Rotate a 4-bit color number left one bit (bit 3 wraps to bit 0). */
+   function rolNibble(n) {
+      return ((n << 1) | (n >> 3)) & 0x0f;
+   }
 
+   /** Double lo-res (80COL + lo-res): 80 columns of 7x4 blocks, aux (even column) then main (odd). */
+   function drawDloResChar(x, y, mb, ab) {
+      var base = (y << 3) * XSIZE + x * 14;
+      for (var half = 0; half < 2; half++) {
+         // aux memory is the left (even) column, main the right (odd) one.
+         // The aux column is shifted out a quarter color cycle off main's phase,
+         // so an aux nibble shows as the lo-res color it equals rotated left one
+         // bit (aux 1 is dark blue, aux 8 magenta), as in MAME's aux_colors table.
+         var c1 = loresColor[rolNibble(half ? (ab >> 4) : (ab & 0x0f))];
+         var c2 = loresColor[half ? (mb >> 4) : (mb & 0x0f)];
+         for (var i = 0; i < 4; i++) {
+            fillPixels(base, 7, c1);
+            fillPixels(base + 7, 7, c2);
+            base += XSIZE;
+         }
+      }
+   }
+
+   function drawTextChar(x, y, b, invert, scale) {
+      var w = 7 * scale;
+      var base = (y << 3) * XSIZE + x * w;
+      var on = invert ? PIXELOFF : PIXELON;
+      var off = invert ? PIXELON : PIXELOFF;
       for (var yy = 0; yy < 8; yy++) {
          var chr = apple2_charset[(b << 3) + yy];
-         pixels[base] = ((chr & 64) > 0) ? on : off;
-         pixels[base + 1] = ((chr & 32) > 0) ? on : off;
-         pixels[base + 2] = ((chr & 16) > 0) ? on : off;
-         pixels[base + 3] = ((chr & 8) > 0) ? on : off;
-         pixels[base + 4] = ((chr & 4) > 0) ? on : off;
-         pixels[base + 5] = ((chr & 2) > 0) ? on : off;
-         pixels[base + 6] = ((chr & 1) > 0) ? on : off;
+         for (var px = 0; px < 7; px++) {
+            fillPixels(base + px * scale, scale, ((chr & (64 >> px)) != 0) ? on : off);
+         }
          base += XSIZE;
       }
    }
@@ -774,19 +932,22 @@ var Apple2Display = function (pixels: Uint32Array, apple: AppleGRParams) {
             yb += XSIZE;
             continue;
          }
-         var c1, c2;
          var b = 0;
          var b1 = apple.mem[base] & 0xff;
          for (var x1 = 0; x1 < 20; x1++) {
             var b2 = apple.mem[base + 1] & 0xff;
             var b3 = apple.mem[base + 2] & 0xff;
             var d1 = (((b & 0x40) << 2) | b1 | b2 << 9) & 0x3ff;
-            for (var i = 0; i < 7; i++)
-               pixels[yb + i] = colors_lut[d1 * 7 + i];
+            for (var i = 0; i < 7; i++) {
+               var c1 = colors_lut[d1 * 7 + i];
+               for (var k = 0; k < HSCALE; k++) pixels[yb + i * HSCALE + k] = c1;
+            }
             var d2 = (((b1 & 0x40) << 2) | b2 | b3 << 9) & 0x3ff;
-            for (var i = 0; i < 7; i++)
-               pixels[yb + 7 + i] = colors_lut[d2 * 7 + 7168 + i];
-            yb += 14;
+            for (var i = 0; i < 7; i++) {
+               var c2 = colors_lut[d2 * 7 + 7168 + i];
+               for (var k = 0; k < HSCALE; k++) pixels[yb + 7 * HSCALE + i * HSCALE + k] = c2;
+            }
+            yb += 14 * HSCALE;
             base += 2;
             b = b2;
             b1 = b3;
@@ -794,18 +955,68 @@ var Apple2Display = function (pixels: Uint32Array, apple: AppleGRParams) {
       }
    }
 
-   function drawLoresLine(y) {
+   /**
+    * Double hi-res (80COL + HIRES + DHIRES): 560 dots per line, of which every
+    * 4 consecutive dots form one of 16 colors (140 pixels). The scanner shifts
+    * out aux bits 0-6 then main bits 0-6 of each column, low bit first, bit 7
+    * is ignored (there is no palette bit). The nibbles straddle byte boundaries
+    * (4 bytes make 7 pixels), so keep a bit accumulator.
+    *
+    * The DHR nibble is the lo-res color number rotated right by one bit (yellow,
+    * lo-res 13 = 1101, is 1110 in DHR; magenta 1 is 8; dark blue 2 is 1), so the
+    * palette index is the nibble rotated back left. 0000 and 1111 are unchanged.
+    */
+   function drawDHRLines(y, maxy) {
+      var mem = apple.mem, aux = apple.auxmem;
+      var yb = y * XSIZE;
+      var pw = XSIZE / 140; // pixel width in buffer pixels
+      for (; y < maxy; y++) {
+         var base = hires_lut[y] + (((apple.grswitch & GR_PAGE1) != 0) ? 0x4000 : 0x2000);
+         if (!apple.dirty[base >> 7]) {
+            yb += XSIZE;
+            continue;
+         }
+         var bits = 0, nbits = 0, px = yb;
+         for (var x = 0; x < 40; x++) {
+            bits |= ((aux[base + x] & 0x7f) | ((mem[base + x] & 0x7f) << 7)) << nbits;
+            nbits += 14;
+            while (nbits >= 4) {
+               var n = bits & 0x0f;
+               fillPixels(px, pw, loresColor[rolNibble(n)]);
+               px += pw;
+               bits >>= 4;
+               nbits -= 4;
+            }
+         }
+         yb += XSIZE;
+      }
+   }
+
+
+   function drawLoresLine(y, scale) {
       // get the base address of this line
       var base = text_lut[y] +
          (((apple.grswitch & GR_PAGE1) != 0) ? 0x800 : 0x400);
-      //		if (!dirty[base >> 7])
-      //		    return;
       for (var x = 0; x < 40; x++) {
          var b = apple.mem[base + x] & 0xff;
          // if the char. changed, draw it
-         if (b != textbuf[y * 40 + x]) {
-            drawLoresChar(x, y, b);
-            textbuf[y * 40 + x] = b;
+         if (b != textbuf[y * 80 + x]) {
+            drawLoresChar(x, y, b, scale);
+            textbuf[y * 80 + x] = b;
+         }
+      }
+   }
+
+   function drawDloResLine(y) {
+      var base = text_lut[y] +
+         (((apple.grswitch & GR_PAGE1) != 0) ? 0x800 : 0x400);
+      for (var x = 0; x < 40; x++) {
+         var mb = apple.mem[base + x] & 0xff;
+         var ab = apple.auxmem[base + x] & 0xff;
+         var key = (mb << 8) | ab;
+         if (key != textbuf[y * 80 + x]) {
+            drawDloResChar(x, y, mb, ab);
+            textbuf[y * 80 + x] = key;
          }
       }
    }
@@ -814,8 +1025,6 @@ var Apple2Display = function (pixels: Uint32Array, apple: AppleGRParams) {
       // get the base address of this line
       var base = text_lut[y] +
          (((apple.grswitch & GR_PAGE1) != 0) ? 0x800 : 0x400);
-      //		if (!dirty[base >> 7])
-      //		    return;
       for (var x = 0; x < 40; x++) {
          var b = apple.mem[base + x] & 0xff;
          var invert;
@@ -831,9 +1040,27 @@ var Apple2Display = function (pixels: Uint32Array, apple: AppleGRParams) {
          } else
             invert = true;
          // if the char. changed, draw it
-         if (b != textbuf[y * 40 + x]) {
-            drawTextChar(x, y, b & 0x7f, invert);
-            textbuf[y * 40 + x] = b;
+         if (b != textbuf[y * 80 + x]) {
+            drawTextChar(x, y, b & 0x7f, invert, HSCALE);
+            textbuf[y * 80 + x] = b;
+         }
+      }
+   }
+
+   /** 80-column text: 40 cells, each main byte then aux byte, 7 pixels each. */
+   function drawTextLine80(y) {
+      var base = text_lut[y] +
+         (((apple.grswitch & GR_PAGE1) != 0) ? 0x800 : 0x400);
+      for (var x = 0; x < 40; x++) {
+         var mb = apple.mem[base + x] & 0xff;
+         var ab = apple.auxmem[base + x] & 0xff;
+         var key = (mb << 8) | ab;
+         if (key != textbuf[y * 80 + x]) {
+            // high bit clear is inverse (there is no flashing in 80 columns)
+            // aux memory holds the even columns, main the odd ones
+            drawTextChar(x * 2, y, ab & 0x7f, (ab & 0x80) == 0, 1);
+            drawTextChar(x * 2 + 1, y, mb & 0x7f, (mb & 0x80) == 0, 1);
+            textbuf[y * 80 + x] = key;
          }
       }
    }
@@ -841,19 +1068,20 @@ var Apple2Display = function (pixels: Uint32Array, apple: AppleGRParams) {
    this.updateScreen = function (totalrepaint) {
       var y;
       var flash = (new Date().getTime() % (flashInterval << 1)) > flashInterval;
+      var is80 = !!(apple.auxmem && apple.col80);
+      // double hi-res needs 80COL and DHIRES (AN3 clear); otherwise hi-res is
+      // drawn at twice the width like the other 40-column modes
+      var isDHR = is80 && apple.an3 === false;
+      var modekey = apple.grswitch | (is80 ? 0x100 : 0) | (isDHR ? 0x200 : 0);
 
       // if graphics mode changed, repaint whole screen
-      if (apple.grswitch != oldgrmode) {
-         oldgrmode = apple.grswitch;
+      if (modekey != oldgrmode) {
+         oldgrmode = modekey;
          totalrepaint = true;
       }
       if (totalrepaint) {
-         // clear textbuf if in text mode
-         if ((apple.grswitch & GR_TXMODE) != 0 || (apple.grswitch & GR_MIXMODE) != 0) {
-            for (y = 0; y < 24; y++)
-               for (var x = 0; x < 40; x++)
-                  textbuf[y * 40 + x] = -1;
-         }
+         for (y = 0; y < 24 * 80; y++)
+            textbuf[y] = -1;
          for (var i = 0; i < apple.dirty.length; i++)
             apple.dirty[i] = true;
       }
@@ -861,25 +1089,29 @@ var Apple2Display = function (pixels: Uint32Array, apple: AppleGRParams) {
       // first, draw top part of window
       if ((apple.grswitch & GR_TXMODE) != 0) {
          for (y = 0; y < 20; y++)
-            drawTextLine(y, flash);
+            is80 ? drawTextLine80(y) : drawTextLine(y, flash);
       } else {
-         if ((apple.grswitch & GR_HIRES) != 0)
-            drawHiresLines(0, 160);
-         else
+         if ((apple.grswitch & GR_HIRES) != 0) {
+            if (isDHR) drawDHRLines(0, 160);
+            else drawHiresLines(0, 160);
+         } else {
             for (y = 0; y < 20; y++)
-               drawLoresLine(y);
+               is80 ? drawDloResLine(y) : drawLoresLine(y, HSCALE);
+         }
       }
 
       // now do mixed part of window
       if ((apple.grswitch & GR_TXMODE) != 0 || (apple.grswitch & GR_MIXMODE) != 0) {
          for (y = 20; y < 24; y++)
-            drawTextLine(y, flash);
+            is80 ? drawTextLine80(y) : drawTextLine(y, flash);
       } else {
-         if ((apple.grswitch & GR_HIRES) != 0)
-            drawHiresLines(160, 192);
-         else
+         if ((apple.grswitch & GR_HIRES) != 0) {
+            if (isDHR) drawDHRLines(160, 192);
+            else drawHiresLines(160, 192);
+         } else {
             for (y = 20; y < 24; y++)
-               drawLoresLine(y);
+               is80 ? drawDloResLine(y) : drawLoresLine(y, HSCALE);
+         }
       }
       for (var i = 0; i < apple.dirty.length; i++)
          apple.dirty[i] = false;
